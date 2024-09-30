@@ -1,0 +1,47 @@
+Cloud Compute Mockup
+
+1. LOGIN
+Upon connecting to the server, user needs to provide username and passkey. These are saved on the server. 
+
+2. Data store
+You can use the server's hash map. You can only retrieve elements from the hashmap that you put there yourself. 
+
+The server uses a single hashmap, with a locking mechanism to make it multithreaded. 
+
+3. Merge sort
+You call a cloud function with an array passed in, and the server will merge sort it
+
+4. Chat
+There is a global chat that all users can log into. It uses TCP. You quit the chat by by typing :quit-chat
+
+5. Encryption
+When the core functionality is done, I'll add encryption to the login process. 
+
+
+---
+
+The Castle in the Clouds
+- Making an account, encryption later, when structure of system is done. 
+- Chatroom
+- Cloud Storage for png images only. Filesize limit: 20 MB, image limit, 10 images. 
+- Max number of users, server side. 
+- "Your account was deleted due to activity", so store that data and display it the next time the user logs in. "Please create a new account"
+- Image processing mode
+- Local Storage Mode ("This folder is located in PATHNAME via env variable)
+- Caching (server loads x number of files in memory, rest is loaded from disk, last used file is removed from cache)
+- 3 strike ban system in chat, all user data will be removed, timer running server-side. 
+- Server side, everything is stored in files so nothing is ever lost. 
+- Merge sort used to sort files
+- make folder FOLDERNAME
+- go FOLDERNAME
+- delete FOLDERNAME
+- delete FILENAME
+- upload FILENAME
+    prompt: 
+    Save: "s", Choose folder: "[foldernumber]", Go Back: "b"
+    1. foldername1
+    2. foldername2
+    3. go back (IF NOT IN THE ROOT)
+        choose folder:
+- User's client configuration file
+- Server side folder for each user + corresponding config file, maybe. 
