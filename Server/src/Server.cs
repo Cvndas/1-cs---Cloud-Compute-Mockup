@@ -1,21 +1,48 @@
-﻿#define SERVER_LOGGING
+﻿// #define SERVER_LOGGING
 
-class Connection
-{
-    private string? _username;
-
-    // TODO : Instead of saving Text Files, save PNG images. SixLabors.ImageSharp via NuGet
-    private String[]? TextFiles;
-
-    public Connection()
-    {
-
-    }
-
-}
+using System.IO;
+using System.Net.Sockets;
+using System.Text;
 
 class Server
 {
+    // The actual main function
+    private static async void RunCloudServer()
+    {
+        Console.WriteLine("Starting up the server");
+        ServerConnectionInfo serverConnectionInfo = new();
+        TcpListener tcpListener = new(serverConnectionInfo.ServerIpEndpoint);
+
+        try {
+            tcpListener.Start();
+            using TcpClient handler = await tcpListener.AcceptTcpClientAsync();
+            Console.WriteLine("Awaiting a connection...");
+            // using TcpClient handler = await acceptConnection;
+            await using NetworkStream stream = handler.GetStream();
+            Console.WriteLine("Connection made!");
+
+            byte[] buffer = new byte[1_024];
+            int received = await stream.ReadAsync(buffer);
+            
+            Console.WriteLine("Message received from client: " + Encoding.UTF8.GetString(buffer));
+
+            string response = "Hey there, client. How's it going?";
+            stream.Write(Encoding.UTF8.GetBytes(response));
+            handler.Close();    
+        }
+
+        catch (Exception e) {
+            Console.WriteLine("Unexpected exception: " + e.Message);
+        }
+        finally {
+            tcpListener.Stop();
+        }
+
+        Console.WriteLine("Closing Server!");
+        return;
+    }
+
+
     public static void Main(string[] args)
     {
         // ---------------- DEBUG LOGGING ------------ // 
@@ -39,8 +66,7 @@ class Server
         // ------------------------------------------- //
 
         try {
-            SetupServer();
-            CloudCastle.MergeSort.Sort();
+            RunCloudServer();
         }
         catch (Exception e) {
             Console.WriteLine("Exception caught in SetupServer(): " + e.Message);
@@ -52,7 +78,7 @@ class Server
         _logFile?.Close();
 #endif
         // ------------------------------------- //
-        Console.WriteLine("Closing Server!");
+        Console.WriteLine("Closing program.");
         return;
     }
     // ------------ DEBUG LOGGING -------------- // 
@@ -67,8 +93,4 @@ class Server
     // ----------------------------------------- //
 
 
-    private static void SetupServer()
-    {
-
-    }
 }

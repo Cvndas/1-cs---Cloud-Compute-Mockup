@@ -45,3 +45,75 @@ The Castle in the Clouds
         choose folder:
 - User's client configuration file
 - Server side folder for each user + corresponding config file, maybe. 
+
+
+--- Mon, 30 Sept, 22:03 ---
+I implemented the basics for both the server and the client. That is, I've set up a log file for both. There is currently no server activity. Tomorrow, I'm first going to think about how I want to handle the server. Once a connection has been established between the Client and the Server, I'm going to implement the basic interactions, where the user can either end the connection and quit the client, or go into one of several modes. 
+
+When that is done, I'll start researching how to transfer arbitrary data over the network. Knowing how to transfer something such as a class with a lot of data on it over a network, or writing and reading it from files, will open up a lot of doors for me. 
+
+https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/sockets/tcp-classes
+https://learn.microsoft.com/en-us/dotnet/api/system.net.sockets.socket?view=net-8.0
+
+Sum:
+1. Architect server structure 
+2. Connect client to the server
+3. Set up basic message interactions between server and client
+4. Client-server arbitrary data transfer. 
+---------------------------
+
+
+
+--- Tue, 1 Oct, 14:37 ---
+I've read the TcpClient page. The documentation is good. Now I need to practice.
+
+IPEndPoint(ip address, portnumber)
+TcpClient has a bunch of different constructors
+Connect and ConnectAsync
+using NetworkStream to read data from the network stream.
+
+16:19
+I've spent some time with this, and I'm surprised at how long this all took, considering how little I achieved. So in short:
+
+IPEndpoint object, which contains an IP Address and a Port number
+TclListener: an abstraction that binds to an IP Endpoint, and listens for incoming connectoins
+tclListener.AcceptSocketClient or AcceptTcpClient: accept an incoming connection
+
+continue; keyword in C# is big! big deal for control flow, especially for a while loop that
+accepts a bunch of incoming connections, anyway
+
+the TcpClient uses NetworkStream object to transfer data over the stream, and receive data over the stream.
+
+Resources that must be closed:
+- TcpClient / Socket
+- Listener: Must be stopped! using; is not enough. Start() must be ended with a Stop()
+- NetworkStream: it's another resource. 
+
+And another thing:
+
+await using ... = ..
+    is different from
+using ... = await ...
+
+await using is for asynchronous releasing of resources, if the object implements async IDisposable.
+await beyond the = is if the function returns a task. This task can be awaited at any time. The function that returns the task is asynchronous. 
+
+To write a function that returns a task and where everything inside is actually running asynchronously with the calling code, start the function with 
+
+return Task.Run( () => {
+    code;
+    return result;
+});
+
+The key here is Task.Run(). 
+
+I guess I did learn some things. 
+
+For client side, 
+
+Create an IP Endpoint that has the information of the server.
+Create TcpClient
+Connect the TcpClient to the IPEndpoint, by calling Connect() on it, or maybe do it in the constructor of the TcpClient immediately. Then, create a NetworkStream by calling client.GetStream(), and just write to this thing.
+
+When writing over the stream, you have to use bytes. Convert a string to bytes using Encoding.UTF8.GetBytes(string);
+

@@ -1,8 +1,14 @@
 ﻿#define CLIENT_LOGGING
+#define DEBUG_ASSERTS
+
+
+using System.Net.Sockets;
+using System.Text;
 
 class Client
 {
-
+    public static ClientConnectionInfo? connectionData;
+    // --------------- Public Methods ------------ // 
     public static void Main()
     {
         // ---------- DEBUG LOGGING ----------- // 
@@ -26,11 +32,13 @@ class Client
 
         LL("++++++CLIENT LOG+++++++");
         Console.WriteLine("Welcome to the Castle of Clouds!");
-        Console.WriteLine("Connecting you to the server...");
 
-        Console.WriteLine("Connected!");
-
-
+        try {
+            RunCloudInstance();
+        }
+        catch (Exception e) {
+            Console.WriteLine("Unexpected error in Main(): " + e.Message);
+        }
 
 
         // ---------- DEBUG LOGGING ------- //
@@ -42,6 +50,52 @@ class Client
         Console.WriteLine("Closing Client!");
         return;
     }
+    // ------------------------------------------- // 
+
+    // ------------- Private Members ------------- // 
+
+    // ------------------------------------------- // 
+
+    // ------------- Private Methods ------------- // 
+
+    private static void RunCloudInstance()
+    {
+        // Simply establish a "hello world" connection, both ways, over TCP.
+        Console.WriteLine("Trying to connect to the server...");
+
+        ClientConnectionInfo connectionData = new();
+        using TcpClient client = new();
+        client.Connect(connectionData.ServerIpEndpoint);
+
+        using NetworkStream stream = client.GetStream();
+
+        // Send Hello World
+        string message = "Hello World!";
+        var messageBytes = Encoding.UTF8.GetBytes(message);
+        stream.Write(messageBytes);
+
+        // Wait for a response
+        int bytesToRead = 1024;
+        byte[] buffer = new byte[bytesToRead];
+        int received = stream.Read(buffer);
+        Console.WriteLine("Received: " + received);
+        Console.WriteLine("Response from server: " + Encoding.UTF8.GetString(buffer));
+
+        return;
+    }
+    // ------------------------------------------- //
+
+
+
+    // ------------ DEBUG ASSERT --------------- // 
+#if DEBUG_ASSERTS
+    public static void AA(Boolean statement)
+    {
+        System.Diagnostics.Debug.Assert(statement);
+    }
+#endif
+
+
 
     // ------------ DEBUG LOGGING -------------- // 
 #if CLIENT_LOGGING
@@ -53,4 +107,6 @@ class Client
     }
 #endif
     // ----------------------------------------- //
+
+
 }
