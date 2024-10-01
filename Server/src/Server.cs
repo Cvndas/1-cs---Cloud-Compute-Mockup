@@ -4,33 +4,27 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 
+
 class Server
 {
     // The actual main function
     private static async void RunCloudServer()
     {
         Console.WriteLine("Starting up the server");
-        ServerConnectionInfo serverConnectionInfo = new();
+        ServerAddressInfo serverConnectionInfo = new();
         TcpListener tcpListener = new(serverConnectionInfo.ServerIpEndpoint);
-
         try {
-            tcpListener.Start();
-            using TcpClient handler = await tcpListener.AcceptTcpClientAsync();
-            Console.WriteLine("Awaiting a connection...");
-            // using TcpClient handler = await acceptConnection;
-            await using NetworkStream stream = handler.GetStream();
-            Console.WriteLine("Connection made!");
+            while (true) {
+                tcpListener.Start();
+                TcpClient handler = tcpListener.AcceptTcpClient(); // CLOSED IN HandleIncomingConnection()
+                Console.WriteLine("Awaiting a connection...");
+                NetworkStream stream = handler.GetStream(); // CLOSED IN HandleIncomingConnection()
+                Console.WriteLine("Connection made!");
 
-            byte[] buffer = new byte[1_024];
-            int received = await stream.ReadAsync(buffer);
-            
-            Console.WriteLine("Message received from client: " + Encoding.UTF8.GetString(buffer));
-
-            string response = "Hey there, client. How's it going?";
-            stream.Write(Encoding.UTF8.GetBytes(response));
-            handler.Close();    
+                Thread clientThread = new Thread(() => HandleIncomingConnection(handler, stream));
+                clientThread.Start();
+            }
         }
-
         catch (Exception e) {
             Console.WriteLine("Unexpected exception: " + e.Message);
         }
@@ -39,6 +33,22 @@ class Server
         }
 
         Console.WriteLine("Closing Server!");
+        return;
+    }
+
+
+    private static void HandleIncomingConnection(TcpClient handler, NetworkStream stream)
+    {
+        try {
+
+        }
+        catch (Exception e) {
+            Console.WriteLine("Unexpected exception in HandleIncomingConnection(): " + e.Message);
+        }
+        finally {
+            handler.Close();
+            stream.Close();
+        }
         return;
     }
 

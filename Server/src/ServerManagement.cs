@@ -1,3 +1,9 @@
+// ---------------- DESCRIPTION -------------- // 
+// The manager of all connections.
+// Responsible for closing threads, clearing the resources,
+// Sending "hey, this connection has been closed" signals to the 
+// client, etc.
+
 class ServerManagement
 {
     static ServerManagement()

@@ -1,12 +1,12 @@
 using System.Net;
 
-class ServerConnectionInfo
+class ServerAddressInfo
 {
     public readonly IPEndPoint ServerIpEndpoint;
     public readonly IPAddress ServerIpAddress;
     public readonly int ServerPortNumber;
 
-    public ServerConnectionInfo()
+    public ServerAddressInfo()
     {
         ServerIpAddress = IPAddress.Loopback;
         ServerPortNumber = 37000;

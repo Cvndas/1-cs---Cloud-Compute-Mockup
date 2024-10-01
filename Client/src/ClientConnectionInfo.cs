@@ -1,13 +1,13 @@
 using System.Net;
 
-class ClientConnectionInfo
+class ClientNetworkInfo
 {
     // -------- Public Variables --------- //
     public readonly IPEndPoint ServerIpEndpoint;
     // ----------------------------------- // 
 
     // -------- Public Methods ----------- //
-    public ClientConnectionInfo()
+    public ClientNetworkInfo()
     {
         ServerIpEndpoint = new(SERVER_IP, SERVER_PORT);
     }
