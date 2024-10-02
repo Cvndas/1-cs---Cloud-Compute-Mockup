@@ -59,7 +59,6 @@ internal class CloudEmployee
         _debug_preamble = $"DEBUG: Employee  {this.ThreadId} ";
 
         // Now notify the thread to start working.
-        // TODO
         lock (_isWorkingLock) {
             _isWorking = true;
             Monitor.Pulse(_isWorkingLock); // Tell the thread to start working.... ... 
@@ -76,9 +75,8 @@ internal class CloudEmployee
         Debug.Assert(_userResources.stream != null);
         Debug.Assert(_userResources.client != null);
         Debug.WriteLine(_debug_preamble + "TERMINATED THE CONNECTION WITH CLIENT");
-
-        _userResources.stream.Close();
-        _userResources.client.Close();
+        _userResources.stream.Dispose();
+        _userResources.client.Dispose();
     }
 
 
@@ -221,6 +219,7 @@ internal class CloudEmployee
         //  ------------------Handle the possible responses for this state. ----------------------- // 
         // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
         string[] usernameAndPassword = receivedString.Split(" ");
+        // username: usernameAndPassword[0], password: usernameAndPassword[1], both may be null.
         if ((ClientFlags)buffer[0] != ClientFlags.SENDING_REGISTRATION_INFO) {
             Debug.WriteLine(_debug_preamble + $"Received flag: {(ClientFlags)buffer[0]}");
             throw new Exception("Incorrect flag received in ProcessRegistration()");
@@ -232,7 +231,9 @@ internal class CloudEmployee
             _registrationAttempts += 1;
             return;
         }
-        // TODO: This check shouldn't be necessary. Test extensively later.
+        // Username and password are not null.
+
+        // TODO misc: This check shouldn't be necessary. Test extensively later.
         else if (usernameAndPassword[0] == null || usernameAndPassword[1] == null) {
             SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
             _registrationAttempts += 1;
@@ -249,18 +250,20 @@ internal class CloudEmployee
             _registrationAttempts += 1;
             return;
         }
-        // TODO: handle case of username already being taken.
-        /*
-        else {
+        
+        else if (CloudManager.Instance.UserIsRegistered(usernameAndPassword[0])){
+        // TODO login : handle case of username already being taken.
             _registrationAttempts += 1;
             return;
         }
-        */
+        
 
         // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
-        // If you didn't get filtered, all is ok! Thank you for creating an account! Let's go back to the authentication screen so you can log in.
+        // If you didn't get filtered, all is ok! Thank you for creating an account! 
+        // Let's go back to the authentication screen so you can log in.
         SendFlag(ServerFlags.OK);
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
         return;
     }
+
 }
