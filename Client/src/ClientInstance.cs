@@ -158,8 +158,9 @@ class ClientInstance
 
     private void ChooseAuthenticateMethod()
     {
+        int attempts = 0;
         while (true) {
-            Write("[Login: l | Register: r] ");
+            Write("[Login: l | Register: r | Quit: q] ");
             string? choice = ReadLine() ?? throw new Exception("Failed to read [userchoice] in ChooseAuthenticateMethod()");
             WriteLine();
 
@@ -173,8 +174,18 @@ class ClientInstance
                 _clientState = ClientStates.LOGGING_IN;
                 return;
             }
+            else if (choice == "q"){
+                SendFlag(ClientFlags.CLIENT_QUIT);
+                _clientState = ClientStates.PROGRAM_CLOSED;
+                return;
+            }
             else {
-                Error.WriteLine("Invalid choice.");
+                WriteLine("Invalid choice.");
+                attempts+= 1;
+            }
+            if (attempts > AuthenticationRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
+                WriteLine("Learn to read.");
+                SendFlag(ClientFlags.CLIENT_QUIT);
             }
         }
     }

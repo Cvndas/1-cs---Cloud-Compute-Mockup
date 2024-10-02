@@ -28,7 +28,7 @@ internal class CloudEmployee
     private NetworkStream? _stream;
     private string? _debug_preamble;
     private int _registrationAttempts = 0;
-    private int _loginAttempts = 0;
+    private int _loginAttempts = 0; // Reset to 0 in AssignClient
 
 
 
@@ -91,6 +91,7 @@ internal class CloudEmployee
     }
 
     // Thread: Employee == self
+    // Persists across different client connections, and when waiting in the _freeEmployeeQueue.
     private void EmployeeJob()
     {
         while (true) {
@@ -103,6 +104,7 @@ internal class CloudEmployee
                 // First wait on conditional variable _hasWork, and then
                 try {
                     RunCloudEmployeeStateMachine();
+                    WriteLine(_debug_preamble + "and the client have disconnected, mutual agreement.");
                 }
                 catch (Exception e) {
                     Debug.WriteLine(_debug_preamble + "Exited the state machine. Reason: " + e.Message);
@@ -110,7 +112,6 @@ internal class CloudEmployee
                 DisposeOfClient();
                 _isWorking = false;
                 Debug.WriteLine(_debug_preamble + "has stopped working.");
-
                 CloudManager.Instance.AddToFreeEmployeeQueue(this);
             }
         }
@@ -159,6 +160,10 @@ internal class CloudEmployee
         }
         else if (flagByte == ClientFlags.LOGIN_REQUEST) {
             this._employeeState = ServerStates.PROCESS_LOGIN;
+            return;
+        }
+        else if (flagByte == ClientFlags.CLIENT_QUIT){
+            this._employeeState = ServerStates.NO_CONNECTION;
             return;
         }
         else {
