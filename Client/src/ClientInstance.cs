@@ -85,7 +85,7 @@ class ClientInstance
             switch (ClientState) {
                 case ClientStates.NO_CONNECTION:
                     try {
-                        Debug.WriteLine("State - NO_CONNECTION");
+                        Trace.WriteLine("State - NO_CONNECTION");
                         ConnectToServer();
                     }
                     catch (Exception e) {
@@ -95,27 +95,27 @@ class ClientInstance
                     break;
 
                 case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
-                    Debug.WriteLine("State - CHOOSING_AUTHENTICATION_METHOD");
+                    Trace.WriteLine("State - CHOOSING_AUTHENTICATION_METHOD");
                     ChooseAuthenticateMethod();
                     break;
 
                 case ClientStates.REGISTERING:
-                    Debug.WriteLine("State - REGISTERING");
+                    Trace.WriteLine("State - REGISTERING");
                     SendRegistrationInfo();
                     break;
 
                 case ClientStates.REGISTRATION_INFO_SENT:
-                    Debug.WriteLine("State - REGISTRATION_INFO_SENT");
+                    Trace.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
                     break;
 
                 case ClientStates.LOGGING_IN:
-                    Debug.WriteLine("State - LOGGING_IN");
+                    Trace.WriteLine("State - LOGGING_IN");
                     SendLoginInfo();
                     break;
 
                 case ClientStates.LOGIN_INFO_SENT:
-                    Debug.WriteLine("State - LOGIN_INFO_SENT");
+                    Trace.WriteLine("State - LOGIN_INFO_SENT");
                     HandleLoginResponse();
                     break;
 
@@ -172,7 +172,8 @@ class ClientInstance
 
     private void SendRegistrationInfo()
     {
-        WriteLine("Please provide a username, followed by a password. Note: Password is not encrypted.");
+        WriteLine("Please provide a username and password, separated by a space. NOTE: Password is not encrypted.");
+        WriteLine("Format: [username password]");
         string? credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
         SendMessage(ClientFlags.SENDING_REGISTRATION_INFO, credentials);
         ClientState = ClientStates.REGISTRATION_INFO_SENT;

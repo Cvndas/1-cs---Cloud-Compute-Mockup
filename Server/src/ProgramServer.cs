@@ -14,6 +14,10 @@ class ProgramServer
         WriteLine("Welcome (Release)");
 #endif
 
+        var myWriter = new TextWriterTraceListener(System.Console.Out);
+        Trace.Listeners.Add(myWriter);
+
+
         try {
             // Handle Ctrl+C sigint
             Console.CancelKeyPress += new ConsoleCancelEventHandler(myConsoleCancelHandler);

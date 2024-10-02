@@ -28,6 +28,7 @@ internal class CloudManager
         lock (_freeEmployeeQueueLock) {
             // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
             _freeEmployeeQueue.Enqueue(cloudEmployee);
+            Monitor.PulseAll(_freeEmployeeQueueLock);
         }
     }
 
@@ -36,10 +37,12 @@ internal class CloudManager
     {
         // Assert that it is the listening thread that is trying to add to the user queue
         // TODO Chat : Remove this assert, and let chat employees fill the pending queue too
+        Trace.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
         Debug.Assert(Thread.CurrentThread.GetHashCode() == ThreadRegistry.ListenerThreadHash);
         lock (_pendingUserQueueLock) {
             // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
             _pendingUserQueue.Enqueue(userResources);
+            Monitor.PulseAll(_pendingUserQueueLock);
         }
         return;
     }
@@ -89,6 +92,7 @@ internal class CloudManager
                 }
                 Debug.Assert(_pendingUserQueue.Count != 0);
                 AssignToEmployee(_pendingUserQueue.Dequeue());
+                Trace.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
             }
         }
     }

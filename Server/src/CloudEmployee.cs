@@ -73,12 +73,12 @@ internal class CloudEmployee
                 // Wait to be assigned work.
                 Monitor.Wait(_isWorkingLock);
             }
-            Debug.WriteLine("Employee hashcode " + Thread.CurrentThread.GetHashCode() + " has started working.");
+            Trace.WriteLine("Employee hashcode " + Thread.CurrentThread.GetHashCode() + " has started working.");
             // First wait on conditional variable _hasWork, and then
             RunCloudEmployeeStateMachine();
             DisposeOfClient();
             _isWorking = false;
-            Debug.WriteLine("Employee hashcode " + Thread.CurrentThread.GetHashCode() + " has stopped working.");
+            Trace.WriteLine("Employee hashcode " + Thread.CurrentThread.GetHashCode() + " has stopped working.");
         }
     }
 
@@ -90,11 +90,12 @@ internal class CloudEmployee
         while (true) {
             switch (_employeeState) {
                 case CloudStates.ServerStates.NO_CONNECTION:
-                    Debug.WriteLine($"Employee hash {Thread.CurrentThread.GetHashCode()}: State - NO_CONNECTION");
+                    Trace.WriteLine($"Employee hash {Thread.CurrentThread.GetHashCode()}: State - NO_CONNECTION");
                     break;
 
                 case CloudStates.ServerStates.PROCESSING_CHOICE:
-                    Debug.WriteLine($"Employee hash {Thread.CurrentThread.GetHashCode()}: State - PROCESSING_CHOICE");
+                    Trace.WriteLine($"Employee hash {Thread.CurrentThread.GetHashCode()}: State - PROCESSING_CHOICE");
+                    ProcessUserChoice();
                     break;
 
                 default:
@@ -102,5 +103,7 @@ internal class CloudEmployee
             }
         }
     }
-
+    private void ProcessUserChoice(){
+        Thread.Sleep(1000000);
+    }
 }

@@ -27,10 +27,12 @@ class CloudListener
         tcpListener.Start();
         try {
             while (_serverIsRunning) {
+                Debug.WriteLine("DEBUG: Listener started loop iteration");
                 TcpClient incomingClient = tcpListener.AcceptTcpClient();
                 NetworkStream stream = incomingClient.GetStream();
                 UserResources newUser = new UserResources(incomingClient, stream);
                 CloudManager.Instance.AddToUserQueue(newUser);
+                Debug.WriteLine("DEBUG: Listener completed loop");
             }
         }
         catch (Exception e) {
