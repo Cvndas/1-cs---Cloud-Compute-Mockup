@@ -14,19 +14,17 @@ internal class CloudManager
     public void CreateCloudEmployeePool()
     {
         for (int i = 0; i < ServerRules.CLOUD_EMPLOYEE_COUNT; i++) {
-            AddToFreeList(new CloudEmployee());
+            AddToFreeEmployeeQueue(new CloudEmployee());
         }
     }
 
 
-    public void AddToFreeList(CloudEmployee cloudEmployee)
+    // Thread: Listener, on bootup
+    // Thread, Unimplemented: ChatEmployee, when returning a user from the chat back to the dashboard.
+    public void AddToFreeEmployeeQueue(CloudEmployee cloudEmployee)
     {
-        // TODO : Implement a proper identification system, so a thread can
-        // add itself in here after closing the connection with the client,
-        // or passing ownership of the client's resources to the ChatManager.
-        // Maybe the "this" keyword is all that is needed?
         lock (_freeEmployeeQueueLock) {
-            // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
+            Debug.WriteLine("DEBUG: " + cloudEmployee.ThreadId + " has been added to the _freeEmployeeQueue");
             _freeEmployeeQueue.Enqueue(cloudEmployee);
             Monitor.PulseAll(_freeEmployeeQueueLock);
         }
@@ -37,10 +35,10 @@ internal class CloudManager
     {
         // Assert that it is the listening thread that is trying to add to the user queue
         // TODO Chat : Remove this assert, and let chat employees fill the pending queue too
-        Trace.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
-        Debug.Assert(Thread.CurrentThread.GetHashCode() == ThreadRegistry.ListenerThreadHash);
+        Debug.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
+        Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.ListenerThreadId);
         lock (_pendingUserQueueLock) {
-            // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
+            // Error.WriteLine("Thread " + Thread.CurrentThread.ManagedThreadId + " acquired lock of _pendingUserQueue");
             _pendingUserQueue.Enqueue(userResources);
             Monitor.PulseAll(_pendingUserQueueLock);
         }
@@ -67,7 +65,7 @@ internal class CloudManager
 
         Thread CloudManagerThread = new Thread(CloudManagerJob);
         CloudManagerThread.Start();
-        ThreadRegistry.CloudManagerThreadHash = CloudManagerThread.GetHashCode();
+        ThreadRegistry.CloudManagerThreadId = CloudManagerThread.ManagedThreadId;
     }
 
 
@@ -92,7 +90,7 @@ internal class CloudManager
                 }
                 Debug.Assert(_pendingUserQueue.Count != 0);
                 AssignToEmployee(_pendingUserQueue.Dequeue());
-                Trace.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
+                Debug.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
             }
         }
     }
@@ -104,7 +102,7 @@ internal class CloudManager
     {
         // Pop an employee from the freelist, assign it with the user resources, 
         // then notify it to start working
-        Debug.Assert(Thread.CurrentThread.GetHashCode() == ThreadRegistry.CloudManagerThreadHash);
+        Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.CloudManagerThreadId);
         Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
 
         CloudEmployee employee;

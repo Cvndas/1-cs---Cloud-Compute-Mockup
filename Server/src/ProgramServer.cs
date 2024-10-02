@@ -25,7 +25,7 @@ class ProgramServer
 
             // Construct the singletons
             CloudListener _listenerInstance = CloudListener.Instance; // Runs on main thread
-            ThreadRegistry.ListenerThreadHash = Thread.CurrentThread.GetHashCode();
+            ThreadRegistry.ListenerThreadId = Thread.CurrentThread.ManagedThreadId;
             CloudManager cloudManagerInstance = CloudManager.Instance; // Launches separate thread
             ChatManager chatManagerInstance = ChatManager.Instance; // TODO CHAT: Launche separate thread.
 
@@ -45,7 +45,7 @@ class ProgramServer
     {
         Error.WriteLine("\nControl C handled.");
         CloudListener.Instance.tcpListener?.Stop();
-        Error.WriteLine("Exiting the program (gracefully).");
+        Error.WriteLine("Exited the server (gracefully).");
         Environment.Exit(0);
     }
 
