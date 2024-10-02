@@ -122,3 +122,6 @@ When writing over the stream, you have to use bytes. Convert a string to bytes u
 I'm now drawing up a plan to manage the server. I've learned a lot, but while learning I didn't plan ahead to build a good structure. I'll implement most of the server tomorrow based on the drawing. 
 
 Alright, drawing up a plan for something like this is mandatory. The moment more than 1 thread is present, it's a life/death situation. 
+
+23:10
+Tomorrow I want to get the login process done according to the state machine. I want it to have support for writing to json files to check for validation, and to see if user exists, etc. No password encryption for now. 
