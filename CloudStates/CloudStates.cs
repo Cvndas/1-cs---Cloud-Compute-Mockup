@@ -1,0 +1,13 @@
+﻿namespace CloudStates;
+
+public enum ClientStates
+{
+    NO_CONNECTION,
+    PROGRAM_CLOSED,
+    CHOOSING_AUTHENTICATE_METHOD,
+    REGISTERING,
+    LOGGING_IN,
+    LOGIN_INFO_SENT,
+    REGISTRATION_INFO_SENT,
+    LOGGED_IN
+}

@@ -1,0 +1,12 @@
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/bin/Debug/net7.0/CloudStates.deps.json
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/bin/Debug/net7.0/CloudStates.dll
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/bin/Debug/net7.0/CloudStates.pdb
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.csproj.AssemblyReference.cache
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.GeneratedMSBuildEditorConfig.editorconfig
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.AssemblyInfoInputs.cache
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.AssemblyInfo.cs
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.csproj.CoreCompileInputs.cache
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.dll
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/refint/CloudStates.dll
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/CloudStates.pdb
+/Volumes/eidasDRIVE/Dropbox/Programming/2024/1_CloudCastle/CloudStates/obj/Debug/net7.0/ref/CloudStates.dll

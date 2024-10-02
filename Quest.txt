@@ -125,3 +125,13 @@ Alright, drawing up a plan for something like this is mandatory. The moment more
 
 23:10
 Tomorrow I want to get the login process done according to the state machine. I want it to have support for writing to json files to check for validation, and to see if user exists, etc. No password encryption for now. 
+
+
+
+--- Wed 2 Oct ---
+06:54
+Starting fresh! I now know how to make a library that both projects can use.
+
+1. dotnet new classlib -n "LibraryName"
+2. dotnet sln add LibraryFolder/LibraryName.csproj
+3. dotnet add ProjectName reference LibraryFolder/LibraryName.csproj

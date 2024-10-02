@@ -1,0 +1,5 @@
+class ChatEmployee{
+    public ChatEmployee(){
+
+    }
+}
