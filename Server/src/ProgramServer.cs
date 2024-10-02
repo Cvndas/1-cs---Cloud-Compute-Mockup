@@ -1,7 +1,8 @@
 global using static System.Console; // Enables use of WriteLine rather than Write
-class Program
+global using System.Diagnostics;
+class ProgramServer
 {
-    static Program()
+    static ProgramServer()
     {
 
     }
@@ -14,12 +15,19 @@ class Program
 #endif
 
         try {
-            // Object via which the main thread will listen for incoming connections
-            Listener listenerInstance = Listener.Instance;
-            CloudManager cloudManagerInstance = CloudManager.Instance;
-            ChatManager chatManagerInstance = ChatManager.Instance;
+            // Handle Ctrl+C sigint
+            Console.CancelKeyPress += new ConsoleCancelEventHandler(myConsoleCancelHandler);
+
+
+            // Construct the singletons
+            CloudListener _listenerInstance = CloudListener.Instance; // Runs on main thread
+            ThreadRegistry.ListenerThreadHash = Thread.CurrentThread.GetHashCode();
+            CloudManager cloudManagerInstance = CloudManager.Instance; // Launches separate thread
+            ChatManager chatManagerInstance = ChatManager.Instance; // TODO CHAT: Launche separate thread.
 
             cloudManagerInstance.CreateCloudEmployeePool();
+
+            _listenerInstance.RunListener();
         }
         catch (Exception e) {
             Error.WriteLine("Unexpected Exception: " + e.Message);
@@ -28,10 +36,13 @@ class Program
         return;
     }
 
-#if DEBUG
-    public static void CloudAssert(bool statement)
+
+    protected static void myConsoleCancelHandler(object? sender, ConsoleCancelEventArgs args)
     {
-        System.Diagnostics.Debug.Assert(statement);
+        Error.WriteLine("\nControl C handled.");
+        CloudListener.Instance.tcpListener?.Stop();
+        Error.WriteLine("Exiting the program (gracefully).");
+        Environment.Exit(0);
     }
-#endif
+
 }

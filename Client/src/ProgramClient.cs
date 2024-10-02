@@ -1,4 +1,5 @@
 ﻿global using static System.Console;
+global using System.Diagnostics;
 using CloudStates;
 
 
@@ -15,16 +16,12 @@ class ProgramClient
 #else
         Console.WriteLine("Welcome (Release)");
 #endif
+
         ClientInstance instance = ClientInstance.Instance;
-        CloudAssert(instance != null);
+        Debug.Assert(instance != null);
         instance?.RunClient();
 
         return;
     }
-#if DEBUG
-    public static void CloudAssert(bool statement){
-        System.Diagnostics.Debug.Assert(statement);
-    }
-#endif
 
 }

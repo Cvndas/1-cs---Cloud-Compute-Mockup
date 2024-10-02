@@ -22,82 +22,97 @@ internal class CloudManager
     public void AddToFreeList(CloudEmployee cloudEmployee)
     {
         // TODO : Implement a proper identification system, so a thread can
-        // add itself in here.
-        lock (_freeListLock) {
-            _freeList.AddToQueue(cloudEmployee);
+        // add itself in here after closing the connection with the client,
+        // or passing ownership of the client's resources to the ChatManager.
+        // Maybe the "this" keyword is all that is needed?
+        lock (_freeEmployeeQueueLock) {
+            // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
+            _freeEmployeeQueue.Enqueue(cloudEmployee);
         }
     }
 
-    // Returns null is the freelist was empty.
-    public CloudEmployee? PopFromFreeList()
+    // Listener thread is the only thread that may access this
+    public void AddToUserQueue(UserResources userResources)
     {
-        CloudEmployee? ret;
-        lock (_freeListLock) {
-            ret = _freeList.PopHead();
+        // Assert that it is the listening thread that is trying to add to the user queue
+        // TODO Chat : Remove this assert, and let chat employees fill the pending queue too
+        Debug.Assert(Thread.CurrentThread.GetHashCode() == ThreadRegistry.ListenerThreadHash);
+        lock (_pendingUserQueueLock) {
+            // Error.WriteLine("Thread " + Thread.CurrentThread.GetHashCode() + " acquired lock of _pendingUserQueue");
+            _pendingUserQueue.Enqueue(userResources);
         }
-        return ret;
+        return;
     }
+
 
     // ----------------- PRIVATE ------------------ // 
     private static CloudManager? _instance;
+
+    private Queue<CloudEmployee> _freeEmployeeQueue;
+    private readonly object _freeEmployeeQueueLock;
+
+    private Queue<UserResources> _pendingUserQueue;
+    private readonly object _pendingUserQueueLock;
+
     private CloudManager()
     {
-        _freeList = FreeCloudEmployees.Instance;
-        _freeListLock = new object();
+        _freeEmployeeQueue = new Queue<CloudEmployee>();
+        _freeEmployeeQueueLock = new object();
+
+        _pendingUserQueue = new Queue<UserResources>();
+        _pendingUserQueueLock = new object();
+
+        Thread CloudManagerThread = new Thread(CloudManagerJob);
+        CloudManagerThread.Start();
+        ThreadRegistry.CloudManagerThreadHash = CloudManagerThread.GetHashCode();
     }
 
-    private FreeCloudEmployees _freeList;
-    private readonly object _freeListLock;
 
 
-
-
-
-    // ------------------- FREELIST --------------- // 
-    // Class that serves as the container for the FreeList. 
-    // Idea: Inheritance to implement the same thing for the chat?
-    private class FreeCloudEmployees
+    // Cloud Manager Thread's Job: Assign users to employees
+    // Thread: CloudManager
+    private void CloudManagerJob()
     {
-        public static FreeCloudEmployees Instance {
-            get {
-                if (_instance == null) {
-                    _instance = new FreeCloudEmployees();
+        while (true) {
+            // First wait for an employee to be ready. There's no point in checking the user queue otherwise.
+            lock (_freeEmployeeQueueLock) {
+                // No employee? wait for one to come in first. 
+                if (_freeEmployeeQueue.Count == 0) {
+                    Monitor.Wait(_freeEmployeeQueueLock);
                 }
-                return _instance;
+            }
+            lock (_pendingUserQueueLock) {
+                // No pending users? Wait for one to come in. In the meantime, employees are free to 
+                // fill up the FreeEmployeeQueue.
+                if (_pendingUserQueue.Count == 0) {
+                    Monitor.Wait(_pendingUserQueueLock);
+                }
+                Debug.Assert(_pendingUserQueue.Count != 0);
+                AssignToEmployee(_pendingUserQueue.Dequeue());
             }
         }
-
-        public void AddToQueue(CloudEmployee cloudEmployee)
-        {
-            if (cloudEmployee != null) {
-                _freeList.Enqueue(cloudEmployee);
-            }
-            else {
-                throw new Exception("Attempted to enqueue a null cloudEmployee to freeList");
-            }
-        }
-
-        public CloudEmployee? PopHead()
-        {
-            bool freeThreadExisted = _freeList.TryDequeue(out CloudEmployee? ret);
-            if (freeThreadExisted) {
-                return ret;
-            }
-            else {
-                return null;
-            }
-        }
-
-        private static FreeCloudEmployees? _instance;
-
-        private FreeCloudEmployees()
-        {
-            _freeList = new Queue<CloudEmployee>();
-        }
-
-        private Queue<CloudEmployee> _freeList;
-
-
     }
+
+    // Return false if there was no available worker.
+    // Return true if it was successful.
+    // Thread: CloudManager
+    private bool AssignToEmployee(UserResources userResources)
+    {
+        // Pop an employee from the freelist, assign it with the user resources, 
+        // then notify it to start working
+        Debug.Assert(Thread.CurrentThread.GetHashCode() == ThreadRegistry.CloudManagerThreadHash);
+        Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
+
+        CloudEmployee employee;
+        lock (_freeEmployeeQueueLock) {
+            employee = _freeEmployeeQueue.Dequeue();
+        }
+        employee.AssignClient(userResources);
+        return false;
+    }
+
 }
+
+
+
 

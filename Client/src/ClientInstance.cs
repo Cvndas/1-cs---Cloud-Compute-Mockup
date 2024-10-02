@@ -80,11 +80,12 @@ class ClientInstance
     private void RunStateMachine()
     {
         bool isTerminated = false;
-        ;
+
         while (!isTerminated) {
             switch (ClientState) {
                 case ClientStates.NO_CONNECTION:
                     try {
+                        Debug.WriteLine("State - NO_CONNECTION");
                         ConnectToServer();
                     }
                     catch (Exception e) {
@@ -94,22 +95,27 @@ class ClientInstance
                     break;
 
                 case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
+                    Debug.WriteLine("State - CHOOSING_AUTHENTICATION_METHOD");
                     ChooseAuthenticateMethod();
                     break;
 
                 case ClientStates.REGISTERING:
+                    Debug.WriteLine("State - REGISTERING");
                     SendRegistrationInfo();
                     break;
 
                 case ClientStates.REGISTRATION_INFO_SENT:
+                    Debug.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
                     break;
 
                 case ClientStates.LOGGING_IN:
+                    Debug.WriteLine("State - LOGGING_IN");
                     SendLoginInfo();
                     break;
 
                 case ClientStates.LOGIN_INFO_SENT:
+                    Debug.WriteLine("State - LOGIN_INFO_SENT");
                     HandleLoginResponse();
                     break;
 
@@ -215,14 +221,14 @@ class ClientInstance
         _stream.Read(buffer);
         ServerFlags serverFlag = (ServerFlags)buffer[0];
 
-        if (serverFlag == ServerFlags.OK){
+        if (serverFlag == ServerFlags.OK) {
             WriteLine("Logged in successfully.");
             ClientState = ClientStates.LOGGED_IN;
             return;
         }
-        else if (serverFlag == ServerFlags.PASSWORD_INCORRECT){
+        else if (serverFlag == ServerFlags.PASSWORD_INCORRECT) {
             // TODO: Implement server-side attempt limiting.
-            WriteLine("Incorrect password. You have 3 more tries."); 
+            WriteLine("Incorrect password. You have 3 more tries.");
             ClientState = ClientStates.LOGGING_IN;
         }
         else {

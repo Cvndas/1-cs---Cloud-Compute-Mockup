@@ -1,5 +1,5 @@
 using System.Net.Sockets;
-record ClientResources(
+record UserResources(
     TcpClient client,
     NetworkStream stream
 );

@@ -11,3 +11,9 @@ public enum ClientStates
     REGISTRATION_INFO_SENT,
     LOGGED_IN
 }
+
+public enum ServerStates
+{
+    NO_CONNECTION,
+    PROCESSING_CHOICE // Entry state when Employee is assigned to a User.
+}
