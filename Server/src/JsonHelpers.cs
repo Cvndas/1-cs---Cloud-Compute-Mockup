@@ -6,7 +6,6 @@ class JsonHelpers
     // NOTE - You must own the lock over the filePath
     public static bool KeyExists(in string filePath, in string username)
     {
-        // TODO JSON
         string existingData = File.ReadAllText(filePath);
         if (existingData == "") {
             return false;
@@ -37,9 +36,7 @@ class JsonHelpers
         Dictionary<string, string>? existingDataDictionary;
         if (existingData == "") {
             Debug.WriteLine("Ok: registeredUsers.json was empty.");
-            existingDataDictionary = new Dictionary<string, string> {
-                    { key, value }
-                };
+            existingDataDictionary = new Dictionary<string, string> {{ key, value }};
         }
         else {
             existingDataDictionary = JsonSerializer.Deserialize<Dictionary<string, string>>(existingData);

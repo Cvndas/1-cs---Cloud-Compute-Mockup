@@ -22,7 +22,6 @@ class ProgramServer
             // Handle Ctrl+C sigint
             Console.CancelKeyPress += new ConsoleCancelEventHandler(myConsoleCancelHandler);
 
-
             // Construct the singletons
             CloudListener _listenerInstance = CloudListener.Instance; // Runs on main thread
             ThreadRegistry.ListenerThreadId = Thread.CurrentThread.ManagedThreadId;

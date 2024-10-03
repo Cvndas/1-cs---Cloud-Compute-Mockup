@@ -113,7 +113,8 @@ internal class CloudEmployee
                 DisposeOfClient();
                 _isWorking = false;
                 Debug.WriteLine(_debug_preamble + "has stopped working.");
-                CloudManager.Instance.AddToFreeEmployeeQueue(this);
+                CloudManager.Instance.AddToFreeQueueRemoveFromActiveList(this);
+
             }
         }
     }
@@ -301,7 +302,7 @@ internal class CloudEmployee
         // Assert that this buffer is large enough to check if the user sent a username+password combo that is too long. +1 should be enough, 
         byte[] buffer = new byte[bufferSize];
         int totalBytesReceived = 0;
-        if (_stream == null){
+        if (_stream == null) {
             throw new Exception(_debug_preamble + "_stream was null in ProcessLogin");
         }
 
@@ -309,9 +310,9 @@ internal class CloudEmployee
             totalBytesReceived += _stream.Read(buffer, 0, bufferSize);
         } while (_stream.DataAvailable);
 
-        ClientFlags clientFlag = (ClientFlags) buffer[0];
+        ClientFlags clientFlag = (ClientFlags)buffer[0];
 
-        if (clientFlag != ClientFlags.SENDING_LOGIN_INFO){
+        if (clientFlag != ClientFlags.SENDING_LOGIN_INFO) {
             SendFlag(ServerFlags.UNEXPECTED_SERVER_ERROR);
             _loginAttempts += 1;
             _employeeState = ServerStates.NO_CONNECTION;
@@ -319,10 +320,10 @@ internal class CloudEmployee
         }
         // Get the ammount of read bytes, minus the flag byte, starting from the byte after the flag byte.
         string usernamePassword = Encoding.UTF8.GetString(buffer, 1, totalBytesReceived - 1);
-        string [] usernamePasswordArray = usernamePassword.Split(" ");
+        string[] usernamePasswordArray = usernamePassword.Split(" ");
 
         // Handling all possible cases.
-        if (usernamePasswordArray.Length != 2){
+        if (usernamePasswordArray.Length != 2) {
             Debug.WriteLine(_debug_preamble + "Credentials were wrong: too little or too many arguments");
             SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
@@ -333,7 +334,7 @@ internal class CloudEmployee
         string password = usernamePasswordArray[1];
 
         // If username is too long, it means it doesn't exist. 
-        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)){
+        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
             Debug.WriteLine(_debug_preamble + "received username that is too long, or it didn't exist.");
             SendFlag(ServerFlags.USERNAME_DOESNT_EXIST);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
@@ -341,7 +342,7 @@ internal class CloudEmployee
             return;
         }
 
-        if (!CloudManager.Instance.IsPasswordCorrect(username, password)){
+        if (!CloudManager.Instance.IsPasswordCorrect(username, password)) {
             Debug.WriteLine(_debug_preamble, "user sent the wrong password.");
             SendFlag(ServerFlags.PASSWORD_INCORRECT);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;

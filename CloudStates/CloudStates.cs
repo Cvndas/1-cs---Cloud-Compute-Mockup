@@ -2,14 +2,18 @@
 
 public enum ClientStates
 {
-    NO_CONNECTION,
+    NO_CONNECTION, 
     PROGRAM_CLOSED,
     CHOOSING_AUTHENTICATE_METHOD,
     REGISTERING,
     LOGGING_IN,
     LOGIN_INFO_SENT,
     REGISTRATION_INFO_SENT,
-    LOGGED_IN
+    LOGGED_IN, // TODO State
+    VIEWING_LOCAL_FILES, // TODO State
+    VIEWING_CLOUD_STORAGE, // TODO State
+    AWAITING_FILE_UPLOAD, // TODO State
+    AWAITING_FILE_DOWNLOAD, // TODO State
 }
 
 public enum ServerStates
@@ -20,4 +24,5 @@ public enum ServerStates
     REGISTRATION_INFO_RECEIVED,
     PROCESS_LOGIN,
     IN_DASHBOARD,
+    PROCESS_
 }

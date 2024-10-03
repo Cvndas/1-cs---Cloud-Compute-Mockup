@@ -1,5 +1,10 @@
 namespace CloudStates;
 
+
+/* 
+    Well, it's fun to write out bytes bit by bit, but I'm pretty sure enums support this out of the box lol
+    // TODO: Test later. 
+*/
 [Flags]
 public enum ClientFlags : byte
 {
@@ -7,7 +12,9 @@ public enum ClientFlags : byte
     REGISTER_REQUEST = 0b00_00_00_01,
     LOGIN_REQUEST = 0b00_00_00_10,
     SENDING_LOGIN_INFO = 0b00_00_00_11,
-    SENDING_REGISTRATION_INFO = 0b00_00_01_00
+    SENDING_REGISTRATION_INFO = 0b00_00_01_00,
+    VIEW_CLOUD_STORAGE,
+
 }
 
 public enum ServerFlags : byte
