@@ -1,4 +1,4 @@
-
+using System.Text.Json;
 
 internal class CloudManager
 {
@@ -26,7 +26,7 @@ internal class CloudManager
     {
         lock (_freeEmployeeQueueLock) {
             Debug.WriteLine("DEBUG: " + cloudEmployee.ThreadId + " has been added to the _freeEmployeeQueue");
-            _freeEmployeeQueue.Enqueue(cloudEmployee);
+            _CR_freeEmployeeQueue.Enqueue(cloudEmployee);
             Monitor.PulseAll(_freeEmployeeQueueLock);
         }
     }
@@ -40,7 +40,7 @@ internal class CloudManager
         Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.ListenerThreadId);
         lock (_pendingUserQueueLock) {
             // Error.WriteLine("Thread " + Thread.CurrentThread.ManagedThreadId + " acquired lock of _pendingUserQueue");
-            _pendingUserQueue.Enqueue(userResources);
+            _CR_pendingUserQueue.Enqueue(userResources);
             Monitor.PulseAll(_pendingUserQueueLock);
         }
         return;
@@ -49,13 +49,21 @@ internal class CloudManager
     // Thread: CloudEmployee-x
     public bool UserIsRegistered(string username)
     {
-        // TODO login 1
-        return false;
+        bool ret;
+        lock (_registeredUsersFileLock) {
+            ret = JsonHelpers.KeyExists(_CR_registeredUsersFilePath, username);
+        }
+        return ret;
     }
 
+    // Thread: CloudEmployee-x
     public void AddUserToRegisteredUsers(string username, string password){
-        // TODO login 2
+        lock (_registeredUsersFileLock){
+            JsonHelpers.AddKeyPair(_CR_registeredUsersFilePath, username, password);
+        }
+        Debug.WriteLine("Employee " + Thread.CurrentThread.ManagedThreadId + " has added " + username + " to registeredUsers.json");
         return;
+
     }
 
     // Thread: CloudManager == this
@@ -76,25 +84,50 @@ internal class CloudManager
     // ----------------- PRIVATE ------------------ // 
     private static CloudManager? _instance;
 
-    private Queue<CloudEmployee> _freeEmployeeQueue;
+    // ------ CRITICAL OBJECT && LOCK ------------- //
+    private Queue<CloudEmployee> _CR_freeEmployeeQueue;
     private readonly object _freeEmployeeQueueLock;
+    // -------------------------------------------- //
 
-    private Queue<UserResources> _pendingUserQueue;
+
+    // ------ CRITICAL OBJECT && LOCK ------------- //
+    private Queue<UserResources> _CR_pendingUserQueue;
     private readonly object _pendingUserQueueLock;
+    // -------------------------------------------- //
+
+    
+
+    // ------ Database File Directories ----------- // 
+    
+    // CurrentWorkingDirectory is verified to be correct upon CloudManager initialization.
+    private static readonly string currentWorkingDirectory = Directory.GetCurrentDirectory();
+    private static readonly string userRecordsDirectoryPath = Path.Combine(currentWorkingDirectory, "database/userRecords");
+    private static readonly string cloudStorageParentDirectoryPath = Path.Combine(currentWorkingDirectory, "database/cloudstorage");
+
+    // ------ CRITICAL OBJECT && LOCK ------------- //
+    // Initialized by CloudManager, later accessed by any CloudEmployee
+    private static readonly string _CR_registeredUsersFilePath = Path.Combine(currentWorkingDirectory, "database/userRecords/registeredUsers.json");
+    private readonly object _registeredUsersFileLock;
+    // -------------------------------------------- //
+
+    private static readonly string removedUsersFilePath = Path.Combine(currentWorkingDirectory, "database/userRecords/removedUsers.json");
 
 
     // Thread: Listener: Only to fill upon startup, before any listening is performed.
     // Thread: CloudManager: Searching through the array to find the Employee who has the least active user.
-    private Queue<CloudEmployee> _activeEmployeesSortedByClientActivity;
+    // Idea: after every 10 messages that an employee has sent, it erases itself from this queue, and apends itself to the back.
+    // private Queue<CloudEmployee> _activeEmployeesSortedByClientActivity;
 
     private CloudManager()
     {
         SetUpDatabaseFiles();
-        _freeEmployeeQueue = new Queue<CloudEmployee>();
+        _CR_freeEmployeeQueue = new Queue<CloudEmployee>();
         _freeEmployeeQueueLock = new object();
 
-        _pendingUserQueue = new Queue<UserResources>();
+        _CR_pendingUserQueue = new Queue<UserResources>();
         _pendingUserQueueLock = new object();
+
+        _registeredUsersFileLock = new object();
 
         // TODO : Think of how to handle kicking inactive users and removing their accounts.
         // There are two types of kicking:
@@ -123,18 +156,18 @@ internal class CloudManager
             // First wait for an employee to be ready. There's no point in checking the user queue otherwise.
             lock (_freeEmployeeQueueLock) {
                 // No employee? wait for one to come in first. 
-                if (_freeEmployeeQueue.Count == 0) {
+                if (_CR_freeEmployeeQueue.Count == 0) {
                     Monitor.Wait(_freeEmployeeQueueLock);
                 }
             }
             lock (_pendingUserQueueLock) {
                 // No pending users? Wait for one to come in. In the meantime, employees are free to 
                 // fill up the FreeEmployeeQueue.
-                if (_pendingUserQueue.Count == 0) {
+                if (_CR_pendingUserQueue.Count == 0) {
                     Monitor.Wait(_pendingUserQueueLock);
                 }
-                Debug.Assert(_pendingUserQueue.Count != 0);
-                AssignToEmployee(_pendingUserQueue.Dequeue());
+                Debug.Assert(_CR_pendingUserQueue.Count != 0);
+                AssignToEmployee(_CR_pendingUserQueue.Dequeue());
                 Debug.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
             }
         }
@@ -152,7 +185,7 @@ internal class CloudManager
 
         CloudEmployee employee;
         lock (_freeEmployeeQueueLock) {
-            employee = _freeEmployeeQueue.Dequeue();
+            employee = _CR_freeEmployeeQueue.Dequeue();
         }
         employee.AssignClient(userResources);
         return false;
@@ -162,35 +195,26 @@ internal class CloudManager
     // Called before any employees are awake, so actions to the Database folder require no locking here.
     private void SetUpDatabaseFiles()
     {
-        string cwd = Directory.GetCurrentDirectory();
-        if (!cwd.EndsWith("/Server")) {
-            Console.WriteLine("Please start the server from the Server directory.");
+        if (!currentWorkingDirectory.EndsWith("/Server")) {
+            WriteLine("Please start the server from the Server directory.");
             throw new Exception("Start server from the Server directory");
         }
 
-        string userRecordsDirectoryPath = Path.Combine(cwd, "database/userRecords");
         if (!Directory.Exists(userRecordsDirectoryPath)){
             Directory.CreateDirectory(userRecordsDirectoryPath);
         }
 
-        // 3. CloudStorage parent directory
-        string cloudStorageParentDirectoryPath = Path.Combine(cwd, "database/cloudstorage");
         if (!Directory.Exists(cloudStorageParentDirectoryPath)){
             Directory.CreateDirectory(cloudStorageParentDirectoryPath);
         }
 
-        // 1. Registered users
-        string registeredUsersPath = Path.Combine(cwd, "database/userRecords/registeredUsers.json");
-        if (!File.Exists(registeredUsersPath)) {
-            File.Create(registeredUsersPath);
+        if (!File.Exists(_CR_registeredUsersFilePath)) {
+            File.Create(_CR_registeredUsersFilePath);
         }
 
-        // 2. Users whose entire account has been removed due to Database inactivity
-        string removedUsersPath = Path.Combine(cwd, "database/userRecords/removedUsers.json");
-        if (!File.Exists(removedUsersPath)) {
-            File.Create(removedUsersPath);
+        if (!File.Exists(removedUsersFilePath)) {
+            File.Create(removedUsersFilePath);
         }
-
     }
 }
 

@@ -58,11 +58,18 @@ class ClientInstance
     }
     // ------------------- PRIVATE ------------------------ // 
 
+    // The server handles this as well, to protect against people who have just modified the client. However,
+    // for those who modify the client to increase the number of registration attempts, they will 
+    // send one more request even though the server has already broken the connection. Inelegant for 
+    // users who run the unmodified client.
+    private int _registrationAttempts = 0;
+
 
     private static ClientInstance? _instance;
     private ClientInstance()
     {
         _serverIpEndPoint = new IPEndPoint(ServerAddress.SERVER_IP, ServerAddress.SERVER_PORT);
+        _registrationAttempts = 0;
     }
 
     private IPEndPoint _serverIpEndPoint;
@@ -109,6 +116,10 @@ class ClientInstance
                 case ClientStates.REGISTRATION_INFO_SENT:
                     Debug.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
+                    if (_registrationAttempts > AuthenticationRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                        WriteLine("Too many registration attempts made.");
+                        _clientState = ClientStates.PROGRAM_CLOSED;
+                    }
                     break;
 
                 case ClientStates.LOGGING_IN:
@@ -174,14 +185,14 @@ class ClientInstance
                 _clientState = ClientStates.LOGGING_IN;
                 return;
             }
-            else if (choice == "q"){
+            else if (choice == "q") {
                 SendFlag(ClientFlags.CLIENT_QUIT);
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
             }
             else {
                 WriteLine("Invalid choice.");
-                attempts+= 1;
+                attempts += 1;
             }
             if (attempts > AuthenticationRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
                 WriteLine("Learn to read.");
@@ -219,12 +230,14 @@ class ClientInstance
         Debug.Assert(bytesRead > 0);
         ServerFlags serverFlag = (ServerFlags)buffer[0];
 
-        // Handling all possible responses...
+        if (serverFlag == ServerFlags.OK) {
+            WriteLine("Account created! Please proceed to login.");
+            _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+            return;
+        }
+        _registrationAttempts += 1;
+        // Handling all other responses
         switch (serverFlag) {
-            case ServerFlags.OK:
-                WriteLine("Account created! Please proceed to login.");
-                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
-                return;
             case ServerFlags.USERNAME_TAKEN:
                 WriteLine("Username was taken. Please choose another");
                 _clientState = ClientStates.REGISTERING;
@@ -242,8 +255,12 @@ class ClientInstance
                 _clientState = ClientStates.REGISTERING;
                 return;
             case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
-                WriteLine("Credentials were passed in incorrectly. Try again.");
+                WriteLine("Credentials were passed in incorrectly.");
                 _clientState = ClientStates.REGISTERING;
+                return;
+            case ServerFlags.UNEXPECTED_SERVER_ERROR:
+                WriteLine("The server has experienced an unexpected error. Try again, or quit.");
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
                 return;
             default:
                 throw new Exception($"invalid server response received in HandleRegisterResponse():\n{serverFlag}\n");

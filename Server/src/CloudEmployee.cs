@@ -6,7 +6,7 @@ internal class CloudEmployee
 {
     public int ThreadId {
         get {
-            if (_employeeThread != null){
+            if (_employeeThread != null) {
                 return _employeeThread.ManagedThreadId;
             }
             return -1;
@@ -160,7 +160,7 @@ internal class CloudEmployee
             this._employeeState = ServerStates.PROCESS_LOGIN;
             return;
         }
-        else if (flagByte == ClientFlags.CLIENT_QUIT){
+        else if (flagByte == ClientFlags.CLIENT_QUIT) {
             this._employeeState = ServerStates.NO_CONNECTION;
             return;
         }
@@ -197,6 +197,7 @@ internal class CloudEmployee
     private void ProcessRegistration()
     {
         Debug.WriteLine(_debug_preamble + "Entered ProcessRegistration");
+        Debug.Assert(_employeeState == ServerStates.PROCESS_REGISTRATION);
         byte[] buffer = new byte[1024];
         int totalBytesRead = 0;
 
@@ -207,7 +208,6 @@ internal class CloudEmployee
             // This is a blocking call
             int iterationBytesRead = _userResources.stream.Read(buffer, 0, 1024);
             totalBytesRead += iterationBytesRead;
-            Debug.WriteLine($"Read {iterationBytesRead} bytes.");
         } while (_userResources.stream.DataAvailable);
 
 
@@ -232,35 +232,40 @@ internal class CloudEmployee
             return;
         }
         // Username and password are not null.
+        string username = usernameAndPassword[0];
+        string password = usernameAndPassword[1];
+        Debug.Assert((username != null) && (password != null));
 
-        // TODO misc: This check shouldn't be necessary. Test extensively later.
-        else if (usernameAndPassword[0] == null || usernameAndPassword[1] == null) {
-            SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
-            _registrationAttempts += 1;
-            return;
-        }
-        // If Username is too long
-        else if (usernameAndPassword[0].Length > AuthenticationRestrictions.MAX_USERNAME_LENGTH) {
+        if (username.Length > AuthenticationRestrictions.MAX_USERNAME_LENGTH) {
             SendFlag(ServerFlags.USERNAME_TOO_LONG);
             _registrationAttempts += 1;
             return;
         }
-        else if (usernameAndPassword[1].Length > AuthenticationRestrictions.MAX_PASSWORD_LENGTH) {
+        else if (password.Length > AuthenticationRestrictions.MAX_PASSWORD_LENGTH) {
             SendFlag(ServerFlags.PASSWORD_TOO_LONG);
             _registrationAttempts += 1;
             return;
         }
-        
-        else if (CloudManager.Instance.UserIsRegistered(usernameAndPassword[0])){
-        // TODO login : handle case of username already being taken.
+
+        else if (CloudManager.Instance.UserIsRegistered(username)) {
+            // TODO login : handle case of username already being taken.
+            SendFlag(ServerFlags.USERNAME_TAKEN);
             _registrationAttempts += 1;
             return;
         }
-        
-
         // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
         // If you didn't get filtered, all is ok! Thank you for creating an account! 
         // Let's go back to the authentication screen so you can log in.
+        try {
+            CloudManager.Instance.AddUserToRegisteredUsers(username, password);
+        }
+        catch (Exception e){
+            WriteLine(_debug_preamble + "failed to write username + password to registeredUsers.json, when they should have.\n"
+            + "Exception info: " + e.Message);
+            _registrationAttempts += 1;
+            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            SendFlag(ServerFlags.UNEXPECTED_SERVER_ERROR);
+        }
         SendFlag(ServerFlags.OK);
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
         return;
