@@ -18,5 +18,6 @@ public enum ServerStates
     PROCESS_AUTHENTICATION_CHOICE, // Entry state when Employee is assigned to a User.
     PROCESS_REGISTRATION,
     REGISTRATION_INFO_RECEIVED,
-    PROCESS_LOGIN
+    PROCESS_LOGIN,
+    IN_DASHBOARD,
 }

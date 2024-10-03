@@ -30,9 +30,8 @@ class ClientInstance
     public void RunClient()
     {
         // Initialize State Machine
-        WriteLine("Welcome to the Castle in the Clouds.\nConnecting you to the server...");
         _clientState = ClientStates.NO_CONNECTION;
-
+        WriteLine("Welcome to the Castle in the Clouds.\nConnecting you to the server...");
         try {
             RunClientStateMachine();
         }
@@ -62,7 +61,8 @@ class ClientInstance
     // for those who modify the client to increase the number of registration attempts, they will 
     // send one more request even though the server has already broken the connection. Inelegant for 
     // users who run the unmodified client.
-    private int _registrationAttempts = 0;
+    private int _registrationAttempts;
+    private int _loginAttempts;
 
 
     private static ClientInstance? _instance;
@@ -70,6 +70,7 @@ class ClientInstance
     {
         _serverIpEndPoint = new IPEndPoint(ServerAddress.SERVER_IP, ServerAddress.SERVER_PORT);
         _registrationAttempts = 0;
+        _loginAttempts = 0;
     }
 
     private IPEndPoint _serverIpEndPoint;
@@ -116,7 +117,7 @@ class ClientInstance
                 case ClientStates.REGISTRATION_INFO_SENT:
                     Debug.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
-                    if (_registrationAttempts > AuthenticationRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                    if (_registrationAttempts > AuthRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         WriteLine("Too many registration attempts made.");
                         _clientState = ClientStates.PROGRAM_CLOSED;
                     }
@@ -130,6 +131,15 @@ class ClientInstance
                 case ClientStates.LOGIN_INFO_SENT:
                     Debug.WriteLine("State - LOGIN_INFO_SENT");
                     HandleLoginResponse();
+                    if (_loginAttempts > AuthRestrictions.MAX_LOGIN_ATTEMPTS) {
+                        WriteLine("Too many login attempts made.");
+                        _clientState = ClientStates.PROGRAM_CLOSED;
+                    }
+                    break;
+
+                case ClientStates.LOGGED_IN:
+                    Debug.WriteLine("State - LOGGED_IN");
+                    ChooseDashboardOption();
                     break;
                 case ClientStates.PROGRAM_CLOSED:
                     return;
@@ -194,7 +204,7 @@ class ClientInstance
                 WriteLine("Invalid choice.");
                 attempts += 1;
             }
-            if (attempts > AuthenticationRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
+            if (attempts > AuthRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
                 WriteLine("Learn to read.");
                 SendFlag(ClientFlags.CLIENT_QUIT);
             }
@@ -203,9 +213,9 @@ class ClientInstance
 
     private void SendRegistrationInfo()
     {
-        WriteLine("Please provide a username and password, separated by a space. NOTE: Password is not encrypted.");
+        WriteLine("Please provide a username and password, separated by a space. NOTE: Passwords are NOT encrypted.");
         WriteLine("Format: [username password]");
-        string? credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
+        string credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
         SendMessage(ClientFlags.SENDING_REGISTRATION_INFO, credentials);
         _clientState = ClientStates.REGISTRATION_INFO_SENT;
         return;
@@ -213,8 +223,8 @@ class ClientInstance
 
     private void SendLoginInfo()
     {
-        WriteLine("Please provide a username, followed by a password. Note: Password is not encrypted.");
-        string? credentials = ReadLine() ?? throw new Exception("Failed to read [credentials] in SendLoginInfo");
+        WriteLine("Please provide a username and password, separated by a space. Note: Passwords are NOT encrypted.");
+        string credentials = ReadLine() ?? throw new Exception("Failed to read [credentials] in SendLoginInfo");
         SendMessage(ClientFlags.SENDING_LOGIN_INFO, credentials);
         _clientState = ClientStates.LOGIN_INFO_SENT;
         return;
@@ -247,11 +257,11 @@ class ClientInstance
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
             case ServerFlags.PASSWORD_TOO_LONG:
-                WriteLine("Password was too long. Max length: " + AuthenticationRestrictions.MAX_PASSWORD_LENGTH + " characters.");
+                WriteLine("Password was too long. Max length: " + AuthRestrictions.MAX_PASSWORD_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case ServerFlags.USERNAME_TOO_LONG:
-                WriteLine("Username was too long. Max length: " + AuthenticationRestrictions.MAX_USERNAME_LENGTH + " characters.");
+                WriteLine("Username was too long. Max length: " + AuthRestrictions.MAX_USERNAME_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
@@ -281,14 +291,41 @@ class ClientInstance
             _clientState = ClientStates.LOGGED_IN;
             return;
         }
-        else if (serverFlag == ServerFlags.PASSWORD_INCORRECT) {
-            // TODO: Implement server-side attempt limiting.
-            WriteLine("Incorrect password. You have 3 more tries.");
-            _clientState = ClientStates.LOGGING_IN;
+
+        _loginAttempts += 1;
+        // Unsuccessful cases
+        switch (serverFlag) {
+            case ServerFlags.PASSWORD_INCORRECT:
+                WriteLine("Incorrect password. You have 3 more tries.");
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+                return;
+            case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
+                WriteLine("");
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+                return;
+            case ServerFlags.USERNAME_DOESNT_EXIST:
+                WriteLine("Username does not exist");
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+                return;
+            case ServerFlags.TOO_MANY_ATTEMPTS:
+                // This line can only be reached if I made a coding mistake, or somebody manipulated the 
+                // client code. 
+                WriteLine("Did you modify the client, lil bro?");
+                _clientState = ClientStates.PROGRAM_CLOSED;
+                return;
+            case ServerFlags.UNEXPECTED_SERVER_ERROR:
+                WriteLine("The server has experienced an unexpected error. Try again, or quit.");
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+                return;
+            default:
+                throw new Exception($"Invalid server response received in HandleLoginResponse():\n{serverFlag}\n");
         }
-        else {
-            throw new Exception($"Invalid server response received in HandleLoginResponse():\n{serverFlag}\n");
-        }
+    }
+
+    private void ChooseDashboardOption()
+    {
+        WriteLine("Dashboard is unimplemented");
+        _clientState = ClientStates.PROGRAM_CLOSED;
     }
 
 }

@@ -1,3 +1,4 @@
+using System.Data;
 using System.Net.Sockets;
 using System.Text;
 using CloudStates;
@@ -27,7 +28,7 @@ internal class CloudEmployee
     private UserResources? _userResources;
     private NetworkStream? _stream;
     private string? _debug_preamble;
-    private int _registrationAttempts = 0;
+    private int _registrationAttempts = 0; // Reset to 0 in AssignClient
     private int _loginAttempts = 0; // Reset to 0 in AssignClient
 
 
@@ -57,6 +58,7 @@ internal class CloudEmployee
         _loginAttempts = 0;
 
         _debug_preamble = $"DEBUG: Employee  {this.ThreadId} ";
+        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
 
         // Now notify the thread to start working.
         lock (_isWorkingLock) {
@@ -95,9 +97,10 @@ internal class CloudEmployee
         while (true) {
             lock (_isWorkingLock) {
                 if (_isWorking == false) {
-                    // Wait to be assigned work.
+                    // Wait to be assigned work by CloudManager
                     Monitor.Wait(_isWorkingLock);
                 }
+                Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
                 Debug.WriteLine(_debug_preamble + "has started working.");
                 // First wait on conditional variable _hasWork, and then
                 try {
@@ -125,7 +128,7 @@ internal class CloudEmployee
             switch (_employeeState) {
                 case ServerStates.NO_CONNECTION:
                     Debug.WriteLine(_debug_preamble + "State - NO_CONNECTION");
-                    break;
+                    return;
 
                 case ServerStates.PROCESS_AUTHENTICATION_CHOICE:
                     Debug.WriteLine(_debug_preamble + "State - PROCESSING_CHOICE");
@@ -134,13 +137,18 @@ internal class CloudEmployee
 
                 case ServerStates.PROCESS_REGISTRATION:
                     Debug.WriteLine(_debug_preamble + "State - PROCESS_REGISTRATION");
-                    if (_registrationAttempts > AuthenticationRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                    if (_registrationAttempts > AuthRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         SendFlag(ServerFlags.TOO_MANY_ATTEMPTS);
                         _employeeState = ServerStates.NO_CONNECTION;
-                        return;
+                        break;
                     }
                     ProcessRegistration();
                     break;
+                case ServerStates.PROCESS_LOGIN:
+                    Debug.WriteLine(_debug_preamble + "State - PROCESS_LOGIN");
+                    ProcessLogin();
+                    break;
+
                 default:
                     throw new Exception(_debug_preamble + "Invalid state transition");
             }
@@ -221,6 +229,7 @@ internal class CloudEmployee
         string[] usernameAndPassword = receivedString.Split(" ");
         // username: usernameAndPassword[0], password: usernameAndPassword[1], both may be null.
         if ((ClientFlags)buffer[0] != ClientFlags.SENDING_REGISTRATION_INFO) {
+            SendFlag(ServerFlags.UNEXPECTED_SERVER_ERROR);
             Debug.WriteLine(_debug_preamble + $"Received flag: {(ClientFlags)buffer[0]}");
             throw new Exception("Incorrect flag received in ProcessRegistration()");
         }
@@ -236,12 +245,12 @@ internal class CloudEmployee
         string password = usernameAndPassword[1];
         Debug.Assert((username != null) && (password != null));
 
-        if (username.Length > AuthenticationRestrictions.MAX_USERNAME_LENGTH) {
+        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH) {
             SendFlag(ServerFlags.USERNAME_TOO_LONG);
             _registrationAttempts += 1;
             return;
         }
-        else if (password.Length > AuthenticationRestrictions.MAX_PASSWORD_LENGTH) {
+        else if (password.Length > AuthRestrictions.MAX_PASSWORD_LENGTH) {
             SendFlag(ServerFlags.PASSWORD_TOO_LONG);
             _registrationAttempts += 1;
             return;
@@ -259,16 +268,85 @@ internal class CloudEmployee
         try {
             CloudManager.Instance.AddUserToRegisteredUsers(username, password);
         }
-        catch (Exception e){
+        catch (Exception e) {
             WriteLine(_debug_preamble + "failed to write username + password to registeredUsers.json, when they should have.\n"
             + "Exception info: " + e.Message);
             _registrationAttempts += 1;
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             SendFlag(ServerFlags.UNEXPECTED_SERVER_ERROR);
+            return;
         }
         SendFlag(ServerFlags.OK);
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
         return;
     }
 
+    private void ProcessLogin()
+    {
+        Debug.WriteLine(_debug_preamble + "entered ProcessLogin()");
+        Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
+        // TODO: Send message to the client if too many attempts have been made.
+
+        // Rewriting a bunch of the code from ProcessRegistration, but it's good practice considering I'm
+        // new to the language.
+
+        // + 1 at the end, to be able to detect if the password is too long. 
+        int bufferSize = AuthRestrictions.MAX_PASSWORD_LENGTH + AuthRestrictions.MAX_USERNAME_LENGTH + 1;
+        // Assert that this buffer is large enough to check if the user sent a username+password combo that is too long. +1 should be enough, 
+        byte[] buffer = new byte[bufferSize];
+        int totalBytesReceived = 0;
+        if (_stream == null){
+            throw new Exception(_debug_preamble + "_stream was null in ProcessLogin");
+        }
+
+        do {
+            totalBytesReceived += _stream.Read(buffer, 0, bufferSize);
+        } while (_stream.DataAvailable);
+
+        ClientFlags clientFlag = (ClientFlags) buffer[0];
+
+        if (clientFlag != ClientFlags.SENDING_LOGIN_INFO){
+            SendFlag(ServerFlags.UNEXPECTED_SERVER_ERROR);
+            _loginAttempts += 1;
+            _employeeState = ServerStates.NO_CONNECTION;
+            throw new Exception(_debug_preamble + "received incorrect flag from client in ProcessLogin()");
+        }
+        // Get the ammount of read bytes, minus the flag byte, starting from the byte after the flag byte.
+        string usernamePassword = Encoding.UTF8.GetString(buffer, 1, totalBytesReceived - 1);
+        string [] usernamePasswordArray = usernamePassword.Split(" ");
+
+        // Handling all possible cases.
+        if (usernamePasswordArray.Length != 2){
+            Debug.WriteLine(_debug_preamble + "Credentials were wrong: too little or too many arguments");
+            SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
+            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            _loginAttempts += 1;
+            return;
+        }
+        string username = usernamePasswordArray[0];
+        string password = usernamePasswordArray[1];
+
+        // If username is too long, it means it doesn't exist. 
+        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)){
+            Debug.WriteLine(_debug_preamble + "received username that is too long, or it didn't exist.");
+            SendFlag(ServerFlags.USERNAME_DOESNT_EXIST);
+            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            _loginAttempts += 1;
+            return;
+        }
+
+        if (!CloudManager.Instance.IsPasswordCorrect(username, password)){
+            Debug.WriteLine(_debug_preamble, "user sent the wrong password.");
+            SendFlag(ServerFlags.PASSWORD_INCORRECT);
+            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            _loginAttempts += 1;
+            return;
+        }
+        Debug.WriteLine(_debug_preamble + "user provided the correct password for the username.");
+
+        SendFlag(ServerFlags.OK);
+        Debug.WriteLine(_debug_preamble + "user logged in successfully. Moving to dashboard.");
+        _employeeState = ServerStates.IN_DASHBOARD;
+        return;
+    }
 }

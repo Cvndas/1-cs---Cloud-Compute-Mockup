@@ -56,6 +56,14 @@ internal class CloudManager
         return ret;
     }
 
+    public bool IsPasswordCorrect(string username, string password){
+        bool ret;
+        lock (_registeredUsersFileLock){
+            ret = JsonHelpers.ValueMatchesKey(username, password, _CR_registeredUsersFilePath);
+        }
+        return ret;;
+    }
+
     // Thread: CloudEmployee-x
     public void AddUserToRegisteredUsers(string username, string password){
         lock (_registeredUsersFileLock){

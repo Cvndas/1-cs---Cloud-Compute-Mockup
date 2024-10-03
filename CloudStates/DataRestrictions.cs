@@ -1,4 +1,4 @@
-public class AuthenticationRestrictions
+public class AuthRestrictions
 {
     public const int MAX_USERNAME_LENGTH = 15;  // bytes or string.Length
     public const int MAX_PASSWORD_LENGTH = 15; // bytes or string.Length
