@@ -3,6 +3,11 @@ using System.Net.Sockets;
 using CloudStates;
 using System.Text;
 
+// Used to store information about download/upload file requests across states.
+struct FileInformation {
+        int fileSize;
+        string fileName;    
+}
 class ClientInstance
 {
     // ------------------- PUBLIC ------------------------ //
@@ -17,15 +22,6 @@ class ClientInstance
             return _instance;
         }
     }
-
-    // public ClientStates ClientState {
-    //     get {
-    //         return _clientState;
-    //     }
-    //     set {
-    //         _clientState = value;
-    //     }
-    // }
 
     public void RunClient()
     {
@@ -57,10 +53,10 @@ class ClientInstance
     }
     // ------------------- PRIVATE ------------------------ // 
 
-    // The server handles this as well, to protect against people who have just modified the client. However,
-    // for those who modify the client to increase the number of registration attempts, they will 
-    // send one more request even though the server has already broken the connection. Inelegant for 
-    // users who run the unmodified client.
+    // The server handles this as well, to protect itself against people who have just modified the client. 
+    // However, at the time of designing this, a purely server-side solution didn't work
+    // for giving the client a smooth experience, so the same system is replicated client side.
+    // Room for improvement, though low priority.
     private int _registrationAttempts;
     private int _loginAttempts;
 
@@ -73,16 +69,20 @@ class ClientInstance
         _loginAttempts = 0;
     }
 
+    // ----------- CONNECTION INFO --------- //
     private IPEndPoint _serverIpEndPoint;
-
     private ClientStates _clientState;
     private TcpClient? _tcpClient;
     private NetworkStream? _stream;
+    // ------------------------------------- //
 
 
-
-
-
+    // ---------- SESSION INFO ------------- //
+    private string _username;
+    private FileInformation _currentFileToUpload;
+    private FileInformation _currentFileToDownload;
+    private readonly string _localStorageFolderPath;
+    // ------------------------------------- //
 
 
 
@@ -224,9 +224,14 @@ class ClientInstance
     private void SendLoginInfo()
     {
         WriteLine("Please provide a username and password, separated by a space. Note: Passwords are NOT encrypted.");
+        WriteLine("Format: [username password]");
         string credentials = ReadLine() ?? throw new Exception("Failed to read [credentials] in SendLoginInfo");
         SendMessage(ClientFlags.SENDING_LOGIN_INFO, credentials);
         _clientState = ClientStates.LOGIN_INFO_SENT;
+
+        // Mark the username for each attempt, in case it ends up being valid.
+        _username = credentials.Split(" ")[0] ?? "";
+
         return;
     }
 
@@ -288,6 +293,7 @@ class ClientInstance
 
         if (serverFlag == ServerFlags.OK) {
             WriteLine("Logged in successfully.");
+            SetupUserSession();
             _clientState = ClientStates.LOGGED_IN;
             return;
         }
@@ -322,10 +328,82 @@ class ClientInstance
         }
     }
 
+    private void SetupUserSession(){
+        // TODO - Implement
+        // Need to make the upload and download info structs not null, and need to set the right filepath for the local folder,
+        // and make the folder if it doesn't exist yet. 
+        WriteLine("UNIMPLEMENTED: SetupSession - Needed for file upload and download and local file view");
+
+        // This assert checks if the username assignment in SendLoginInfo() was correct.
+        Debug.Assert(_username != null && _username != "");
+        return;
+    }
+
     private void ChooseDashboardOption()
     {
-        WriteLine("Dashboard is unimplemented");
-        _clientState = ClientStates.PROGRAM_CLOSED;
+        // TODO HIGH PRIORITY
+        while (true) {
+            WriteLine("[-] +++ +++ Welcome to the Dashboard +++ +++ [-]");
+            WriteLine("View local files: l | View files in cloud: c | Upload file: [u filename] | Download file: [u filename]");
+            string? userChoice = Console.ReadLine();
+
+            if (userChoice == null) {
+                Error.WriteLine("Unexpected error when receiving userchoice.");
+                continue;
+            }
+
+            if (userChoice == "l") {
+                ShowLocalFiles();
+            }
+            else if (userChoice == "c") {
+                ViewCloudFiles();
+            }
+            else if (userChoice.StartsWith("u")) {
+                // Let the server handle the issue of the request being incorrectly formatted, as it has to do it anyway.
+                RequestUpload(request: userChoice);
+            }
+            else if (userChoice.StartsWith("d")) {
+                // Let the server handle the issue of the request being incorrectly formatted, as it has to do it anyway.
+                // This method changes the state, so breaking out of ChooseDashboardOption()
+                RequestDownload(request: userChoice);
+                break;
+            }
+
+        }
+
+    }
+
+    private void ShowLocalFiles()
+    {
+        // TODO - Implement
+        return;
+    }
+    private void ViewCloudFiles()
+    {
+        // TODO - Implement, based on ShowLocalFiles, but with extra bells and whistles.
+        return;
+    }
+
+    private void RequestUpload(string request)
+    {
+        // TODO - Implement, after local file view
+    }
+
+    // Requests a download.
+    private void RequestDownload(string request)
+    {
+        // TODO - Implement, after file upload.
+        // Send the request to the server, and change the state of the client based on the response.
+
+
+        // Send request to file
+
+        // If request is rejected, state = back to LOGGED_IN
+        // If request is accepted, state = AWAITING_FILE_DOWNLOAD, don't want to be interrupted,
+        // though to be fair there won't be any file corruption as we're working with small files,
+        // everything can be stored into memory, so we can just load the entire received bytes into memory
+        // before writing to disk. If we don't receive all bytes, we don't write to disk, so we don't write
+        // anything that's corrupted.
     }
 
 }

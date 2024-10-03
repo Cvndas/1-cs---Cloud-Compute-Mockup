@@ -12,8 +12,8 @@ public enum ClientStates
     LOGGED_IN, // TODO State
     VIEWING_LOCAL_FILES, // TODO State
     VIEWING_CLOUD_STORAGE, // TODO State
-    AWAITING_FILE_UPLOAD, // TODO State
-    AWAITING_FILE_DOWNLOAD, // TODO State
+    AWAITING_FILE_DOWNLOAD, 
+    AWAITING_FILE_UPLOAD 
 }
 
 public enum ServerStates
@@ -24,5 +24,6 @@ public enum ServerStates
     REGISTRATION_INFO_RECEIVED,
     PROCESS_LOGIN,
     IN_DASHBOARD,
-    PROCESS_
+    WAITING_FOR_FILE_UPLOAD, // Special state, that really shouldn't be interrupted
+    SENDING_FILE_TO_CLIENT, // Special state, that really shouldn't be interrupted
 }
