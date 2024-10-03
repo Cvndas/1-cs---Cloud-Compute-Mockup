@@ -149,6 +149,12 @@ internal class CloudEmployee
                     ProcessLogin();
                     break;
 
+                case ServerStates.IN_DASHBOARD:
+                    Debug.WriteLine(_debug_preamble + "State - IN_DASHBOARD");
+                    // TODO - Manage the dashboard state machine
+                    _employeeState = ServerStates.NO_CONNECTION;
+                    break;
+
                 default:
                     throw new Exception(_debug_preamble + "Invalid state transition");
             }

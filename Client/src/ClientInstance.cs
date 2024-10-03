@@ -296,7 +296,7 @@ class ClientInstance
         // Unsuccessful cases
         switch (serverFlag) {
             case ServerFlags.PASSWORD_INCORRECT:
-                WriteLine("Incorrect password. You have 3 more tries.");
+                WriteLine($"Incorrect password. You have {AuthRestrictions.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
                 _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
                 return;
             case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
