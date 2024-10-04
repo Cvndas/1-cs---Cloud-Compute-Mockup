@@ -142,6 +142,9 @@ class ClientInstance
                     Debug.WriteLine("State - LOGGED_IN");
                     ChooseDashboardOption();
                     break;
+                case ClientStates.IN_CHAT:
+                    RunChatInterface();
+                    break;
                 case ClientStates.PROGRAM_CLOSED:
                     return;
                 default:
@@ -416,6 +419,13 @@ class ClientInstance
         // everything can be stored into memory, so we can just load the entire received bytes into memory
         // before writing to disk. If we don't receive all bytes, we don't write to disk, so we don't write
         // anything that's corrupted.
+    }
+
+    private void RunChatInterface(){
+        string hwText = "Hello Chat!";
+        byte[] buffer = Encoding.UTF8.GetBytes(hwText);
+        _stream!.Write(buffer);
+        _clientState = ClientStates.PROGRAM_CLOSED;
     }
 
 }

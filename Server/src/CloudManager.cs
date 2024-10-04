@@ -80,15 +80,16 @@ internal class CloudManager
     private void DebugPrintActiveFreeEmployees()
     {
         Debug.Assert(Monitor.IsEntered(_activeEmployeeListLock) && Monitor.IsEntered(_freeEmployeeQueueLock));
-        Debug.Write("Active: ");
+        Debug.Write("Cloud's Active: ");
         foreach (var activeEmployee in _CR_activeEmployeeList) {
             Debug.Write(activeEmployee.ThreadId + " ");
         }
-        Debug.WriteLine("\n");
-        Debug.Write("Free: ");
+        Debug.Write(", ");
+        Debug.Write("Cloud's Free: ");
         foreach (var freeEmployee in _CR_freeEmployeeQueue) {
             Debug.Write(freeEmployee.ThreadId + " ");
         }
+        Debug.Write("\n");
     }
 #endif
 

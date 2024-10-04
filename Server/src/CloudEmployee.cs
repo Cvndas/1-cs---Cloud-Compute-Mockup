@@ -90,7 +90,6 @@ internal class CloudEmployee
     private void TransferClientToChatManager()
     {
         // TODO Implent for Chat
-        Console.WriteLine("TransferClientToChatManager - Unimplemented");
         try {
             ChatManager.Instance.AddToUserQueue(_userResources);
         }
