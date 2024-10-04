@@ -13,7 +13,8 @@ public enum ClientStates
     VIEWING_LOCAL_FILES, // TODO State
     VIEWING_CLOUD_STORAGE, // TODO State
     AWAITING_FILE_DOWNLOAD, 
-    AWAITING_FILE_UPLOAD 
+    AWAITING_FILE_UPLOAD,
+    IN_CHAT,
 }
 
 public enum ServerStates

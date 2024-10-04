@@ -17,6 +17,7 @@ public enum ClientFlags : byte
     TO_DASHBOARD, // Later, when returning from chat.
     UPLOAD_REQUEST,
     DOWNLOAD_REQUEST,
+    TO_CHAT,
 
 }
 
@@ -45,5 +46,6 @@ public enum ServerFlags : byte
     FILE_DOESNT_EXIST_ON_SERVER,
     DOWNLOAD_COMPLETE,
     DOWNLOAD_COMING,
+    REQUEST_TOO_LONG,
 
 }

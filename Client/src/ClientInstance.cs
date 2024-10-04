@@ -4,9 +4,10 @@ using CloudStates;
 using System.Text;
 
 // Used to store information about download/upload file requests across states.
-struct FileInformation {
-        int fileSize;
-        string fileName;    
+struct FileInformation
+{
+    int fileSize;
+    string fileName;
 }
 class ClientInstance
 {
@@ -51,9 +52,9 @@ class ClientInstance
 
         }
     }
-    // ------------------- PRIVATE ------------------------ // 
+    // ------------------- PRIVATE ------------------------ //
 
-    // The server handles this as well, to protect itself against people who have just modified the client. 
+    // The server handles this as well, to protect itself against people who have just modified the client.
     // However, at the time of designing this, a purely server-side solution didn't work
     // for giving the client a smooth experience, so the same system is replicated client side.
     // Room for improvement, though low priority.
@@ -78,15 +79,15 @@ class ClientInstance
 
 
     // ---------- SESSION INFO ------------- //
-    private string _username;
-    private FileInformation _currentFileToUpload;
-    private FileInformation _currentFileToDownload;
-    private readonly string _localStorageFolderPath;
+    private string? _username;
+    private FileInformation? _currentFileToUpload;
+    private FileInformation? _currentFileToDownload;
+    private readonly string? _localStorageFolderPath;
     // ------------------------------------- //
 
 
 
-    // ------------------- Big State Machine --------------- // 
+    // ------------------- Big State Machine --------------- //
     private void RunClientStateMachine()
     {
         bool isTerminated = false;
@@ -117,7 +118,7 @@ class ClientInstance
                 case ClientStates.REGISTRATION_INFO_SENT:
                     Debug.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
-                    if (_registrationAttempts > AuthRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                    if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         WriteLine("Too many registration attempts made.");
                         _clientState = ClientStates.PROGRAM_CLOSED;
                     }
@@ -131,7 +132,7 @@ class ClientInstance
                 case ClientStates.LOGIN_INFO_SENT:
                     Debug.WriteLine("State - LOGIN_INFO_SENT");
                     HandleLoginResponse();
-                    if (_loginAttempts > AuthRestrictions.MAX_LOGIN_ATTEMPTS) {
+                    if (_loginAttempts > SystemRestrictions.MAX_LOGIN_ATTEMPTS) {
                         WriteLine("Too many login attempts made.");
                         _clientState = ClientStates.PROGRAM_CLOSED;
                     }
@@ -164,10 +165,8 @@ class ClientInstance
         _stream?.Write(buffer);
     }
 
-    private void SendMessage(ClientFlags clientFlag, string message)
+    private void SendMessageText(ClientFlags clientFlag, string message)
     {
-        // TODO : implement this
-        // Don't forget to convert the Message to UTF8 bytes via Encoding.UTF8.GetBytes();
         var messageBytes = Encoding.UTF8.GetBytes(message);
         byte[] buffer = new Byte[sizeof(ClientFlags) + messageBytes.Length];
         byte flagByte = (byte)clientFlag;
@@ -175,6 +174,11 @@ class ClientInstance
         Array.Copy(messageBytes, 0, buffer, 1, messageBytes.Length);
         _stream?.Write(buffer, 0, buffer.Length);
         return;
+    }
+
+    private void SendMessageData(ClientFlags clientFlag)
+    {
+        // TODO: Use for sending any data that is non-text. Figure out which data format this function should accept.
     }
 
     private void ChooseAuthenticateMethod()
@@ -204,7 +208,7 @@ class ClientInstance
                 WriteLine("Invalid choice.");
                 attempts += 1;
             }
-            if (attempts > AuthRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
+            if (attempts > SystemRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
                 WriteLine("Learn to read.");
                 SendFlag(ClientFlags.CLIENT_QUIT);
             }
@@ -216,7 +220,7 @@ class ClientInstance
         WriteLine("Please provide a username and password, separated by a space. NOTE: Passwords are NOT encrypted.");
         WriteLine("Format: [username password]");
         string credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
-        SendMessage(ClientFlags.SENDING_REGISTRATION_INFO, credentials);
+        SendMessageText(ClientFlags.SENDING_REGISTRATION_INFO, credentials);
         _clientState = ClientStates.REGISTRATION_INFO_SENT;
         return;
     }
@@ -226,7 +230,7 @@ class ClientInstance
         WriteLine("Please provide a username and password, separated by a space. Note: Passwords are NOT encrypted.");
         WriteLine("Format: [username password]");
         string credentials = ReadLine() ?? throw new Exception("Failed to read [credentials] in SendLoginInfo");
-        SendMessage(ClientFlags.SENDING_LOGIN_INFO, credentials);
+        SendMessageText(ClientFlags.SENDING_LOGIN_INFO, credentials);
         _clientState = ClientStates.LOGIN_INFO_SENT;
 
         // Mark the username for each attempt, in case it ends up being valid.
@@ -262,11 +266,11 @@ class ClientInstance
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
             case ServerFlags.PASSWORD_TOO_LONG:
-                WriteLine("Password was too long. Max length: " + AuthRestrictions.MAX_PASSWORD_LENGTH + " characters.");
+                WriteLine("Password was too long. Max length: " + SystemRestrictions.MAX_PASSWORD_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case ServerFlags.USERNAME_TOO_LONG:
-                WriteLine("Username was too long. Max length: " + AuthRestrictions.MAX_USERNAME_LENGTH + " characters.");
+                WriteLine("Username was too long. Max length: " + SystemRestrictions.MAX_USERNAME_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
@@ -302,7 +306,7 @@ class ClientInstance
         // Unsuccessful cases
         switch (serverFlag) {
             case ServerFlags.PASSWORD_INCORRECT:
-                WriteLine($"Incorrect password. You have {AuthRestrictions.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
+                WriteLine($"Incorrect password. You have {SystemRestrictions.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
                 _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
                 return;
             case ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE:
@@ -314,8 +318,8 @@ class ClientInstance
                 _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
                 return;
             case ServerFlags.TOO_MANY_ATTEMPTS:
-                // This line can only be reached if I made a coding mistake, or somebody manipulated the 
-                // client code. 
+                // This line can only be reached if I made a coding mistake, or somebody manipulated the
+                // client code.
                 WriteLine("Did you modify the client, lil bro?");
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
@@ -328,10 +332,14 @@ class ClientInstance
         }
     }
 
-    private void SetupUserSession(){
+    private void SetupUserSession()
+    {
         // TODO - Implement
         // Need to make the upload and download info structs not null, and need to set the right filepath for the local folder,
-        // and make the folder if it doesn't exist yet. 
+        // and make the folder if it doesn't exist yet.
+
+        // Note: Each client can store multiple local users.
+        // TODO End of project: Delete local folders too if the account was purged from the cloud.
         WriteLine("UNIMPLEMENTED: SetupSession - Needed for file upload and download and local file view");
 
         // This assert checks if the username assignment in SendLoginInfo() was correct.
@@ -344,7 +352,7 @@ class ClientInstance
         // TODO HIGH PRIORITY
         while (true) {
             WriteLine("[-] +++ +++ Welcome to the Dashboard +++ +++ [-]");
-            WriteLine("View local files: l | View files in cloud: c | Upload file: [u filename] | Download file: [u filename]");
+            WriteLine("View local files: l | View files in cloud: c | Upload file: [u filename] | Download file: [u filename] | Enter Chat: chat");
             string? userChoice = Console.ReadLine();
 
             if (userChoice == null) {
@@ -368,9 +376,13 @@ class ClientInstance
                 RequestDownload(request: userChoice);
                 break;
             }
-
+            else if (userChoice.StartsWith("chat")) {
+                // TODO : Handle the server side.
+                SendFlag(ClientFlags.TO_CHAT);
+                _clientState = ClientStates.IN_CHAT;
+                break;
+            }
         }
-
     }
 
     private void ShowLocalFiles()
@@ -407,39 +419,3 @@ class ClientInstance
     }
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,5 +1,7 @@
 using System.Text.Json;
 // All methods in here assume your thread has control over the json object that these actions are performed on
+
+namespace Server.src;
 class JsonHelpers
 {
 
@@ -36,7 +38,7 @@ class JsonHelpers
         Dictionary<string, string>? existingDataDictionary;
         if (existingData == "") {
             Debug.WriteLine("Ok: registeredUsers.json was empty.");
-            existingDataDictionary = new Dictionary<string, string> {{ key, value }};
+            existingDataDictionary = new Dictionary<string, string> { { key, value } };
         }
         else {
             existingDataDictionary = JsonSerializer.Deserialize<Dictionary<string, string>>(existingData);
@@ -71,7 +73,7 @@ class JsonHelpers
             return false;
         }
         catch (Exception e) {
-            Console.WriteLine("Error in ValueMatchesKey: " + e.Message);
+            WriteLine("Error in ValueMatchesKey: " + e.Message);
         }
         return false;
     }

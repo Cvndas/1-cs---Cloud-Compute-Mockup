@@ -1,3 +1,5 @@
+namespace Server.src;
+
 class ServerRules
 {
     // While the 10 most active users may store their data on the server, only the 5 most active 
@@ -8,4 +10,5 @@ class ServerRules
     public const int CLOUD_EMPLOYEE_COUNT = 5;
     public const int CHAT_EMPLOYEE_COUNT = 5;
     public const int MAX_USER_RECORDS = 10;
+    public const int MAX_LOGGED_IN_USERS = 10;
 }

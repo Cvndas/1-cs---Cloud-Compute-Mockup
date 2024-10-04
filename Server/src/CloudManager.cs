@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+namespace Server.src;
 internal class CloudManager
 {
     public static CloudManager Instance {
@@ -30,6 +31,33 @@ internal class CloudManager
         }
     }
 
+    // Threads: CloudEmployee-x
+    public void AddToLoggedInList(UserResources user)
+    {
+        lock (_loggedInUsersLock) {
+            Debug.Assert(!_CR_loggedInUsers.Contains(user)); // Under no circumstances should a user be logged in twice.
+            _CR_loggedInUsers.Add(user);
+        }
+    }
+
+    // Threads: CloudEmployee-x
+    // TODO : Verify that this filters someone trying to bypass login by using the username of someone
+    // who was already logged in. (Idea: We're storing stream and socket info, those are unique.)
+    public bool CanUserSkipRegistration(UserResources user)
+    {
+        bool ret = false;
+        lock (_loggedInUsersLock) {
+            if (_CR_loggedInUsers.Contains(user)) {
+                ret = true;
+                // if (ChatManager.Instance.IsUserInChat(user)) {
+                    // throw new AttemptToLoginTwice();
+                // }
+            }
+
+        }
+        return ret;
+    }
+
     // Thread: CloudEmployee, when breaking connection with client, or when passing the client to the chat manager
     // Yes, the name is long. But it should only be called by one other point in the program, so it doesn't matter.
     public void AddToFreeQueueRemoveFromActiveList(CloudEmployee cloudEmployee)
@@ -41,13 +69,28 @@ internal class CloudManager
                 if (!_CR_activeEmployeeList.Remove(cloudEmployee)) {
                     throw new Exception("Failed to remove employee from Active list");
                 }
+                DebugPrintActiveFreeEmployees();
             }
             // Wake up the CloudManager thread, if it was waiting for a free employee to be made available.
             Monitor.PulseAll(_freeEmployeeQueueLock);
-            Debug.WriteLine("Active: " + string.Join(", ", _CR_activeEmployeeList));
-            Debug.WriteLine("Free: " + string.Join(", ", _CR_freeEmployeeQueue));
         }
     }
+
+#if DEBUG
+    private void DebugPrintActiveFreeEmployees()
+    {
+        Debug.Assert(Monitor.IsEntered(_activeEmployeeListLock) && Monitor.IsEntered(_freeEmployeeQueueLock));
+        Debug.Write("Active: ");
+        foreach (var activeEmployee in _CR_activeEmployeeList) {
+            Debug.Write(activeEmployee.ThreadId + " ");
+        }
+        Debug.WriteLine("\n");
+        Debug.Write("Free: ");
+        foreach (var freeEmployee in _CR_freeEmployeeQueue) {
+            Debug.Write(freeEmployee.ThreadId + " ");
+        }
+    }
+#endif
 
     // Listener thread is the only thread that may access this
     public void AddToUserQueue(UserResources userResources)
@@ -113,6 +156,16 @@ internal class CloudManager
     // ----------------- PRIVATE ------------------ // 
     private static CloudManager? _instance;
 
+    // ------- CRITICAL OBJECT && LOCK ------------ // 
+    // Idea: CloudEmployees add users into the list if they succeed in registering to the server.
+    // If the user enters the chat, then quits the chat, they end up back in the pending user queue.
+    // When they are matched with a CloudEmployee, the employee checks if they're already logged in,
+    // and registration is skipped.
+    private List<UserResources> _CR_loggedInUsers;
+    private readonly object _loggedInUsersLock;
+    // -------------------------------------------- //
+
+
     // ------ CRITICAL OBJECT && LOCK ------------- //
     private readonly Queue<CloudEmployee> _CR_freeEmployeeQueue;
     private readonly object _freeEmployeeQueueLock;
@@ -165,6 +218,8 @@ internal class CloudManager
         _CR_pendingUserQueue = new Queue<UserResources>();
         _pendingUserQueueLock = new object();
 
+        _CR_loggedInUsers = new List<UserResources>(ServerRules.MAX_LOGGED_IN_USERS);
+        _loggedInUsersLock = new object();
 
         _registeredUsersFileLock = new object();
 
@@ -180,7 +235,7 @@ internal class CloudManager
         // But first comes simply writing data to the registeredUsers.json file, which is done by a CloudEmployee upon registration.
         // This employee obviously needs to lock the registeredUsers.json file.
 
-        Thread CloudManagerThread = new Thread(CloudManagerJob);
+        Thread CloudManagerThread = new(CloudManagerJob);
         CloudManagerThread.Start();
         ThreadRegistry.CloudManagerThreadId = CloudManagerThread.ManagedThreadId;
     }
@@ -259,5 +314,7 @@ internal class CloudManager
 }
 
 
+public class AttemptToLoginTwice : Exception
+{
 
-
+}

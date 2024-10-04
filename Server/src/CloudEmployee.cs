@@ -3,6 +3,8 @@ using System.Net.Sockets;
 using System.Text;
 using CloudStates;
 
+namespace Server.src;
+
 internal class CloudEmployee
 {
     public int ThreadId {
@@ -31,13 +33,14 @@ internal class CloudEmployee
     private int _registrationAttempts = 0; // Reset to 0 in AssignClient
     private int _loginAttempts = 0; // Reset to 0 in AssignClient
 
+    private bool _transferedUserToChat;
 
 
     // Thread: Listener
     // Launches an _employeeThread on the EmployeeJob() method.
     public CloudEmployee()
     {
-        _employeeState = CloudStates.ServerStates.NO_CONNECTION;
+        _employeeState = ServerStates.NO_CONNECTION;
         _isWorking = false;
         _isWorkingLock = new object();
 
@@ -52,12 +55,13 @@ internal class CloudEmployee
         Debug.Assert(userResources != null);
         _userResources = userResources;
         _stream = _userResources.stream;
+        _transferedUserToChat = false;
         Debug.Assert(_stream != null);
 
         _registrationAttempts = 0;
         _loginAttempts = 0;
 
-        _debug_preamble = $"DEBUG: Employee  {this.ThreadId} ";
+        _debug_preamble = $"DEBUG: Employee  {ThreadId} ";
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
 
         // Now notify the thread to start working.
@@ -83,9 +87,20 @@ internal class CloudEmployee
 
 
     //  Thread: Employee-x == self
-    private void transferResourcesToChatManager(ChatEmployee chatEmployee)
+    private void TransferClientToChatManager()
     {
         // TODO Implent for Chat
+        Console.WriteLine("TransferClientToChatManager - Unimplemented");
+        try {
+            ChatManager.Instance.AddToUserQueue(_userResources);
+        }
+        catch (Exception e){
+            Error.WriteLine("Exception caught in TransferClientToChatManager: " + e.Message);
+        }
+        finally{
+            _transferedUserToChat = true;
+            _employeeState = ServerStates.NO_CONNECTION;
+        }
         // Without closing the user's resources, transfer them over into the ChatQueue.
         return;
     }
@@ -107,10 +122,14 @@ internal class CloudEmployee
                     RunCloudEmployeeStateMachine();
                     WriteLine(_debug_preamble + "and the client have disconnected, mutual agreement.");
                 }
+                // TODO : Test that -> This exception should be triggered if at any point in the relationship 
+                //between Employee and Client, the TCP connection is broken.
                 catch (Exception e) {
                     Debug.WriteLine(_debug_preamble + "Exited the state machine. Reason: " + e.Message);
                 }
-                DisposeOfClient();
+                if (!_transferedUserToChat) {
+                    DisposeOfClient();
+                }
                 _isWorking = false;
                 Debug.WriteLine(_debug_preamble + "has stopped working.");
                 CloudManager.Instance.AddToFreeQueueRemoveFromActiveList(this);
@@ -123,7 +142,7 @@ internal class CloudEmployee
     private void RunCloudEmployeeStateMachine()
     {
         Debug.Assert(Monitor.IsEntered(_isWorkingLock));
-        _employeeState = CloudStates.ServerStates.PROCESS_AUTHENTICATION_CHOICE; // Set the state to the entry state
+        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE; // Set the state to the entry state
         // Can use volatile variable to cause Employee to exit.
         while (true) {
             switch (_employeeState) {
@@ -138,7 +157,7 @@ internal class CloudEmployee
 
                 case ServerStates.PROCESS_REGISTRATION:
                     Debug.WriteLine(_debug_preamble + "State - PROCESS_REGISTRATION");
-                    if (_registrationAttempts > AuthRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                    if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         SendFlag(ServerFlags.TOO_MANY_ATTEMPTS);
                         _employeeState = ServerStates.NO_CONNECTION;
                         break;
@@ -153,7 +172,7 @@ internal class CloudEmployee
                 case ServerStates.IN_DASHBOARD:
                     Debug.WriteLine(_debug_preamble + "State - IN_DASHBOARD");
                     // TODO - Manage the dashboard state machine
-                    _employeeState = ServerStates.NO_CONNECTION;
+                    ProcessDashboard();
                     break;
 
                 default:
@@ -168,15 +187,15 @@ internal class CloudEmployee
         ClientFlags flagByte = ReceiveFlag();
         Debug.WriteLine("DEBUG: Received flagByte: " + flagByte);
         if (flagByte == ClientFlags.REGISTER_REQUEST) {
-            this._employeeState = ServerStates.PROCESS_REGISTRATION;
+            _employeeState = ServerStates.PROCESS_REGISTRATION;
             return;
         }
         else if (flagByte == ClientFlags.LOGIN_REQUEST) {
-            this._employeeState = ServerStates.PROCESS_LOGIN;
+            _employeeState = ServerStates.PROCESS_LOGIN;
             return;
         }
         else if (flagByte == ClientFlags.CLIENT_QUIT) {
-            this._employeeState = ServerStates.NO_CONNECTION;
+            _employeeState = ServerStates.NO_CONNECTION;
             return;
         }
         else {
@@ -213,7 +232,12 @@ internal class CloudEmployee
     {
         Debug.WriteLine(_debug_preamble + "Entered ProcessRegistration");
         Debug.Assert(_employeeState == ServerStates.PROCESS_REGISTRATION);
-        byte[] buffer = new byte[1024];
+
+        // Explained in ProcessLogin. Idea: least number of bytes needed to detect password that is too long.
+        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(ServerFlags) + " ".Length + sizeof(byte);
+        Debug.Assert(bufferSize == 33);
+
+        byte[] buffer = new byte[bufferSize];
         int totalBytesRead = 0;
 
         if (_userResources == null) {
@@ -221,7 +245,7 @@ internal class CloudEmployee
         }
         do {
             // This is a blocking call
-            int iterationBytesRead = _userResources.stream.Read(buffer, 0, 1024);
+            int iterationBytesRead = _userResources.stream.Read(buffer, 0, bufferSize);
             totalBytesRead += iterationBytesRead;
         } while (_userResources.stream.DataAvailable);
 
@@ -240,9 +264,9 @@ internal class CloudEmployee
             Debug.WriteLine(_debug_preamble + $"Received flag: {(ClientFlags)buffer[0]}");
             throw new Exception("Incorrect flag received in ProcessRegistration()");
         }
-
-        if (usernameAndPassword.Length != 2) {
-            Debug.WriteLine(_debug_preamble + "Credentials were wrong: too little or too many arguments");
+        // Check if there are either 2 spaces in different places or two consecutive spaces.
+        if (usernameAndPassword.Length != 2 || receivedString.IndexOf(" ") != receivedString.LastIndexOf(" ")) {
+            Debug.WriteLine(_debug_preamble + "Credentials were wrong.");
             SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
             _registrationAttempts += 1;
             return;
@@ -250,14 +274,14 @@ internal class CloudEmployee
         // Username and password are not null.
         string username = usernameAndPassword[0];
         string password = usernameAndPassword[1];
-        Debug.Assert((username != null) && (password != null));
+        Debug.Assert(username != null && password != null);
 
-        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH) {
+        if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH) {
             SendFlag(ServerFlags.USERNAME_TOO_LONG);
             _registrationAttempts += 1;
             return;
         }
-        else if (password.Length > AuthRestrictions.MAX_PASSWORD_LENGTH) {
+        else if (password.Length > SystemRestrictions.MAX_PASSWORD_LENGTH) {
             SendFlag(ServerFlags.PASSWORD_TOO_LONG);
             _registrationAttempts += 1;
             return;
@@ -292,13 +316,14 @@ internal class CloudEmployee
     {
         Debug.WriteLine(_debug_preamble + "entered ProcessLogin()");
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
-        // TODO: Send message to the client if too many attempts have been made.
 
-        // Rewriting a bunch of the code from ProcessRegistration, but it's good practice considering I'm
-        // new to the language.
-
-        // + 1 at the end, to be able to detect if the password is too long. 
-        int bufferSize = AuthRestrictions.MAX_PASSWORD_LENGTH + AuthRestrictions.MAX_USERNAME_LENGTH + 1;
+        // Idea: Must be able to detect when the user sends a username or password that is too long.
+        // Situation 1: username is too long | Since username comes first, even if the username takes up all bytes, it'll be fully transmitted,
+        // and detected that it is too long
+        // Situation 2: password is too long | Let's say the user sends a username that is max length(15), then the buffer must
+        // hold at least 16 more bytes to detect a password of >15 bytes. Add to that the flag byte, and the space byte -> 15 + 16 + 1 + 1 = 33,
+        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(ServerFlags) + " ".Length + sizeof(byte);
+        Debug.Assert(bufferSize == 33);
         // Assert that this buffer is large enough to check if the user sent a username+password combo that is too long. +1 should be enough, 
         byte[] buffer = new byte[bufferSize];
         int totalBytesReceived = 0;
@@ -323,7 +348,7 @@ internal class CloudEmployee
         string[] usernamePasswordArray = usernamePassword.Split(" ");
 
         // Handling all possible cases.
-        if (usernamePasswordArray.Length != 2) {
+        if (usernamePasswordArray.Length != 2 || usernamePassword.IndexOf(" ") != usernamePassword.LastIndexOf(" ")) {
             Debug.WriteLine(_debug_preamble + "Credentials were wrong: too little or too many arguments");
             SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
@@ -334,7 +359,7 @@ internal class CloudEmployee
         string password = usernamePasswordArray[1];
 
         // If username is too long, it means it doesn't exist. 
-        if (username.Length > AuthRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
+        if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
             Debug.WriteLine(_debug_preamble + "received username that is too long, or it didn't exist.");
             SendFlag(ServerFlags.USERNAME_DOESNT_EXIST);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
@@ -355,5 +380,44 @@ internal class CloudEmployee
         Debug.WriteLine(_debug_preamble + "user logged in successfully. Moving to dashboard.");
         _employeeState = ServerStates.IN_DASHBOARD;
         return;
+    }
+
+    // Thread: CloudEmployee-x
+    private void ProcessDashboard()
+    {
+        // The longest possible request is UPLOAD_REQUEST " " FileName " " FileSize
+        // TODO : Assert that it is indeed impossible for a user's request to exceed the buffersize, or for values to be 
+        // read differently from what the user sent.
+        int maximumRequestLength = sizeof(ClientFlags) + " ".Length + SystemRestrictions.MAX_FILENAME_LENGTH + " ".Length + sizeof(int);
+        int bufferSize = maximumRequestLength + 1;
+        byte[] buffer = new byte[bufferSize];
+        int receivedBytes = 0;
+
+        do {
+            receivedBytes += _stream!.Read(buffer, 0, bufferSize);
+        } while (_stream.DataAvailable);
+
+        ClientFlags receivedFlag = (ClientFlags)buffer[0];
+
+        // Process flag-only cases first
+        if (receivedFlag == ClientFlags.TO_CHAT) {
+            TransferClientToChatManager();
+            return;
+        }
+
+        Console.WriteLine("ProcessDashboard: Only TO_CHAT is (partially) implemented.");
+        string receivedString = Encoding.UTF8.GetString(buffer);
+        string[] receivedStringComponents = receivedString.Split(" ");
+        if (true) {
+
+        }
+
+        // TODO: check if there are two spaces, if so, make sure they're not next to one another. 
+        else if (receivedBytes > maximumRequestLength) {
+            SendFlag(ServerFlags.REQUEST_TOO_LONG);
+            return;
+        }
+
+
     }
 }

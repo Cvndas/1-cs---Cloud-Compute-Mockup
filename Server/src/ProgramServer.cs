@@ -1,5 +1,7 @@
 global using static System.Console; // Enables use of WriteLine rather than Write
 global using System.Diagnostics;
+
+namespace Server.src;
 class ProgramServer
 {
     static ProgramServer()
@@ -14,13 +16,13 @@ class ProgramServer
         WriteLine("Welcome (Release)");
 #endif
 
-        var myWriter = new TextWriterTraceListener(System.Console.Out);
+        var myWriter = new TextWriterTraceListener(Out);
         Trace.Listeners.Add(myWriter);
 
 
         try {
             // Handle Ctrl+C sigint
-            Console.CancelKeyPress += new ConsoleCancelEventHandler(myConsoleCancelHandler);
+            CancelKeyPress += new ConsoleCancelEventHandler(myConsoleCancelHandler);
 
             // Construct the singletons
             CloudListener _listenerInstance = CloudListener.Instance; // Runs on main thread
@@ -29,6 +31,7 @@ class ProgramServer
             ChatManager chatManagerInstance = ChatManager.Instance; // TODO CHAT: Launche separate thread.
 
             cloudManagerInstance.CreateCloudEmployeePool();
+            chatManagerInstance.CreateChatEmployeePool();
 
             _listenerInstance.RunListener();
         }
