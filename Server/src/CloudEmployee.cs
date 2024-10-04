@@ -418,16 +418,15 @@ internal class CloudEmployee
         Console.WriteLine("ProcessDashboard: Only TO_CHAT is (partially) implemented.");
         string receivedString = Encoding.UTF8.GetString(buffer);
         string[] receivedStringComponents = receivedString.Split(" ");
-        if (true) {
 
-        }
+        // if (true) {
 
-        // TODO: check if there are two spaces, if so, make sure they're not next to one another. 
-        else if (receivedBytes > maximumRequestLength) {
-            SendFlag(ServerFlags.REQUEST_TOO_LONG);
-            return;
-        }
+        // }
 
-
+        // // TODO: check if there are two spaces, if so, make sure they're not next to one another. 
+        // else if (receivedBytes > maximumRequestLength) {
+        //     SendFlag(ServerFlags.REQUEST_TOO_LONG);
+        //     return;
+        // }
     }
 }

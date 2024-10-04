@@ -120,6 +120,7 @@ class ChatManager
     // Thread: ChatManager
     private void ChatManagerJob()
     {
+        ThreadRegistry.ChatManagerThreadId = Thread.CurrentThread.ManagedThreadId;
         while (true) {
             ChatEmployee chosenEmployee;
             // Wait for an employee to be available.

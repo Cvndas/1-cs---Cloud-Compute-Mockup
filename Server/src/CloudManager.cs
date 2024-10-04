@@ -162,6 +162,7 @@ internal class CloudManager
     public string FindLeastActiveUser()
     {
         // TODO kicking 
+        Console.WriteLine("Unimplemented");
         return "";
     }
 
@@ -169,6 +170,7 @@ internal class CloudManager
     private void RemoveMemberFromSystem()
     {
         // TODO kicking
+        Console.WriteLine("Unimplemented.");
         // Find the thread, forcefully cancel it using C# mechanism.
     }
 
@@ -221,11 +223,7 @@ internal class CloudManager
     private static readonly string removedUsersFilePath = Path.Combine(currentWorkingDirectory, "database/userRecords/removedUsers.json");
 
 
-    // Thread: Listener: Only to fill upon startup, before any listening is performed.
-    // Thread: CloudManager: Searching through the array to find the Employee who has the least active user.
-    // Idea: after every 10 messages that an employee has sent, it erases itself from this queue, and apends itself to the back.
-    // private Queue<CloudEmployee> _activeEmployeesSortedByClientActivity;
-
+    // Thread: Listener, before any listening is performed.
     private CloudManager()
     {
         SetUpDatabaseFiles();
@@ -242,18 +240,6 @@ internal class CloudManager
         _loggedInUsersResourcesLock = new object();
 
         _registeredUsersFileLock = new object();
-
-        // TODO, after chat is implemented: Think of how to handle kicking inactive users and removing their accounts.
-        // There are two types of kicking:
-        // 1. A 6th user has logged in, you were inactive, you are kicked from the server. You have to re-start the client.
-        // 2. A new user has logged in and made their own database, creating the 11th database. You were the last to touch
-        //    the database, so your acount has been removed from registeredUsers.json, added to removedUsers.json, and 
-        //    your cloudstorage/username folder has been deleted. You are only kicked if you happen to have been online at that point, but
-        //    you receive the "your account has been deleted due to inactivity" message regardless the first time you submit your
-        //    username again. 
-
-        // But first comes simply writing data to the registeredUsers.json file, which is done by a CloudEmployee upon registration.
-        // This employee obviously needs to lock the registeredUsers.json file.
 
         Thread CloudManagerThread = new(CloudManagerJob);
         CloudManagerThread.Start();
