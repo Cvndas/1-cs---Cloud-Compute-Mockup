@@ -18,7 +18,6 @@ public enum ClientFlags : byte
     UPLOAD_REQUEST,
     DOWNLOAD_REQUEST,
     TO_CHAT,
-
 }
 
 public enum ServerFlags : byte
@@ -49,5 +48,9 @@ public enum ServerFlags : byte
     REQUEST_TOO_LONG,
     QUEUE_POSITION,
     ALREADY_LOGGED_IN,
+}
 
+public enum SharedFlags : byte
+{
+    CHAT_MESSAGE,
 }

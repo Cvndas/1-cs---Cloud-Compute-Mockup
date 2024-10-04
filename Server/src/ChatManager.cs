@@ -118,8 +118,9 @@ class ChatManager
 
     private static ChatManager? _instance;
 
-
-    // Thread: ChatManager
+    /// <summary>
+    /// Thread: ChatManager
+    /// </summary>
     private void ChatManagerJob()
     {
         ThreadRegistry.ChatManagerThreadId = Environment.CurrentManagedThreadId;
@@ -139,6 +140,25 @@ class ChatManager
                 chosenEmployee.ConnectWithClient(_CR_unassignedUsersQueue.Dequeue());
             }
         }
+    }
+    /// <summary>
+    /// Thread: ChatEmployee's "Listen to client" thread.
+    /// </summary>
+    public void FillAllChatClientQueues(byte[] messageIncludingFlag, int ThreadToIgnore)
+    {
+        lock (_activeChatEmployeesLock) {
+            Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has started filling queues");
+            foreach (ChatEmployee employee in _CR_activeChatEmployees) {
+                if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
+                    employee.EnqueueChatEmployeeQueue(messageIncludingFlag);
+                }
+                else {
+                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has IGNORED a queue");
+                }
+            }
+            Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has FINISHED filling queues");
+        }
+        return;
     }
 
 }

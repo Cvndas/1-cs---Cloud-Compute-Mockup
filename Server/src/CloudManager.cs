@@ -22,7 +22,9 @@ internal class CloudManager
         }
     }
 
-    // Thread: Main, only run on bootup.
+    /// <summary>
+    /// Thread: Main, only run on bootup.
+    /// </summary>
     public void AddToFreeQueue(CloudEmployee cloudEmployee)
     {
         lock (_freeEmployeeQueueLock) {
@@ -32,8 +34,9 @@ internal class CloudManager
             Monitor.PulseAll(_freeEmployeeQueueLock);
         }
     }
-
-    // Threads: CloudEmployee-x
+    /// <summary>
+    /// Threads: CloudEmployee-x
+    /// </summary>
     public void AddToLoggedInList(UserResources user)
     {
         lock (_loggedInUsersResourcesLock) {
@@ -42,13 +45,14 @@ internal class CloudManager
         }
     }
 
-    // Threads: CloudEmployee-x
-    // If you, with your current TcpClient and Stream, are logged in,
-    // you may skip the registration stage and go straight into the dahsboard.
-
-    // TODO : Figure out where to fit this in. Probably need to modify both server and client state machines.
+    /// <summary>
+    /// Threads: CloudEmployee-x <br/>
+    /// If you, with your current TcpClient and Stream, are logged in,
+    /// you may skip the registration stage and go straight into the dahsboard.
+    /// </summary>
     public bool CanUserSkipRegistration(UserResources user)
     {
+        // TODO Chat : Figure out where to fit this in. Probably need to modify both server and client state machines.
         bool ret = false;
         lock (_loggedInUsersResourcesLock) {
             // Username isn't enough: check the network resources.
@@ -75,8 +79,9 @@ internal class CloudManager
         return false;
     }
 
-    // Thread: CloudEmployee, when breaking connection with client, or when passing the client to the chat manager
-    // Yes, the name is long. But it should only be called by one other point in the program, so it doesn't matter.
+    /// <summary>
+    /// Thread: CloudEmployee, when breaking connection with client, or when passing the client to the chat manager
+    /// </summary>
     public void AddToFreeQueueRemoveFromActiveList(CloudEmployee cloudEmployee)
     {
         lock (_freeEmployeeQueueLock) {
@@ -110,8 +115,12 @@ internal class CloudManager
     }
 #endif
 
-    // Thread: Listener, main - When users connect to the server.
-    // Thread: ChatEmployee, when user exits the chat.
+    /// <summary>
+    /// Thread: Listener, main - When users connect to the server. <br/>
+    /// Thread: ChatEmployee, when user exits the chat. <br/>
+    /// Note: Handles the locking internally.
+    /// </summary>
+    /// <param name="userResources"></param>
     public void AddToUserQueue(UserResources userResources)
     {
         Debug.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
@@ -210,7 +219,9 @@ internal class CloudManager
 
     // ------ Database File Directories ----------- // 
 
-    // CurrentWorkingDirectory is verified to be correct upon CloudManager initialization.
+    /// <summary>
+    /// CurrentWorkingDirectory is verified to be correct upon CloudManager initialization.
+    /// </summary>
     private static readonly string currentWorkingDirectory = Directory.GetCurrentDirectory();
     private static readonly string userRecordsDirectoryPath = Path.Combine(currentWorkingDirectory, "database/userRecords");
     private static readonly string cloudStorageParentDirectoryPath = Path.Combine(currentWorkingDirectory, "database/cloudstorage");
@@ -223,8 +234,9 @@ internal class CloudManager
 
     private static readonly string removedUsersFilePath = Path.Combine(currentWorkingDirectory, "database/userRecords/removedUsers.json");
 
-
-    // Thread: Listener, before any listening is performed.
+    /// <summary>
+    /// Thread: Listener, before any listening is performed.
+    /// </summary>
     private CloudManager()
     {
         SetUpDatabaseFiles();
@@ -249,8 +261,10 @@ internal class CloudManager
 
 
 
-    // Cloud Manager Thread's Job: Assign users to employees
-    // Thread: CloudManager
+    /// <summary>
+    /// Cloud Manager Thread's Job: Assign users to employees<br/>
+    /// Thread: CloudManager
+    /// </summary>
     private void CloudManagerJob()
     {
         while (true) {
@@ -281,24 +295,28 @@ internal class CloudManager
             }
         }
     }
-
-    // Thread: CloudManager
+    /// <summary>
+    /// Thread: CloudManager
+    /// </summary>
     private bool UserIsStillActive(UserResources user)
     {
         // Protocol: if a user quits 
         return user.client.Connected;
     }
 
-    // Thread: CloudManager - Called when an active user is popped from the queue.
+    /// <summary>
+    /// Thread: CloudManager - Called when an active user is popped from the queue.
+    /// </summary>
     private void InformUserHeIsAssigned(UserResources user)
     {
         byte[] buffer = new byte[1];
         buffer[0] = (byte)ServerFlags.OK;
         user.stream.Write(buffer);
     }
-
-    // Thread: CloudManager - Sent to everyone in the queue after assigning the head
-    // Thread: Main/Listener - Sent to newly added user after they've been added to the queue.
+    /// <summary>
+    /// Thread: CloudManager - Sent to everyone in the queue after assigning the head <br/>
+    /// Thread: Main/Listener - Sent to newly added user after they've been added to the queue.
+    /// </summary>
     private void InformUserOfQueueStatus(UserResources user, int queuePosition)
     {
         int messageSize = sizeof(byte) + queuePosition.ToString().Length;
@@ -309,10 +327,11 @@ internal class CloudManager
 
         user.stream.Write(buffer);
     }
-
-    // Thread: Cloud Manager, after dequeuing to grab the first-in-line user 
-    // Thread: ChatEmployee, after returning the user into the queue
-    // Thread: Main, upon adding newly connected users into the queue.
+    /// <summary>
+    /// Thread: Cloud Manager, after dequeuing to grab the first-in-line user <br/>
+    /// Thread: ChatEmployee, after returning the user into the queue <br/>
+    /// Thread: Main, upon adding newly connected users into the queue. <br/>
+    /// </summary>
     private void NotifyUsersOfQueueStatus()
     {
         Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
@@ -328,8 +347,10 @@ internal class CloudManager
 
     }
 
-    // Thread: CloudManager
-    // Note: Assumes that caller has ensured that the _freeEmployeeQueue is NOT empty.
+    /// <summary>
+    /// Thread: CloudManager <br/>
+    /// Note: Assumes that caller has ensured that the _freeEmployeeQueue is NOT empty.
+    /// </summary>
     private void AssignToEmployee(UserResources userResources)
     {
         // Pop an employee from the freelist, assign it with the user resources, 
@@ -348,7 +369,9 @@ internal class CloudManager
     }
 
 
-    // Called before any employees are awake, so actions to the Database folder require no locking here.
+    /// <summary>
+    /// Called before any employees are awake, so actions to the Database folder require no locking here.
+    /// </summary>
     private static void SetUpDatabaseFiles()
     {
         if (!currentWorkingDirectory.EndsWith("/Server")) {
@@ -372,6 +395,7 @@ internal class CloudManager
             File.Create(removedUsersFilePath);
         }
     }
+
 }
 
 

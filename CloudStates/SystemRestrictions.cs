@@ -10,4 +10,5 @@ public class SystemRestrictions
     public const int MAX_FILESIZE_MB = 20;
     public const int MAX_FILES_IN_CLOUD = 5;
     public const int MAX_USERS_IN_QUEUE = 100;
+    public const int MAX_CHAT_MESSAGE_LENGTH = 50;
 }

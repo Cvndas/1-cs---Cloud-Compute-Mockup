@@ -2,6 +2,11 @@ global using static System.Console; // Enables use of WriteLine rather than Writ
 global using System.Diagnostics;
 
 namespace Server.src;
+
+// Note: An easy way to break or hack this server would be to input characters that are 2 bytes in length, rather than 1.
+// The code always assumes that String.Length is the same as byte[].Count
+// This should be fixable by going through all the string.Length and replacing it with Encoding.UTF8.GetBytes(string).Count
+// But honestly, since this program will never run online, I probably won't fix that.
 class ProgramServer
 {
     static ProgramServer()
