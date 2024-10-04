@@ -82,7 +82,6 @@ class ChatEmployee
             while (true) {
                 // Wait to be assigned a task.
                 Monitor.Wait(_isWorkingLock);
-                Debug.WriteLine(_debugPreamble + "has received an assignment.");
                 try {
                     // ++++++++++++++ Task has been assigned ++++++++++++++ // 
                     _connectionWithClientIsActive = true;
@@ -93,9 +92,6 @@ class ChatEmployee
 
                     ChatManager.Instance.AddChatEmployeeToActiveList(this);
                     _CR_isWorking = true;
-
-
-                    Debug.WriteLine(_debugPreamble + "has connected with user.");
 
                     // The current thread is the ListenToUser thread, which fills up collegue queues.
                     // Now launching the SendToUser thread, which sends a message to the user when
@@ -177,13 +173,11 @@ class ChatEmployee
             lock (_chatClientQueueLock) {
                 if (_CR_chatClientQueue.Count < 1) {
                     // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
-                    Debug.WriteLine("DEBUG: waiting for my queue to be filled before I can send back to my client");
                     Monitor.Wait(_chatClientQueueLock);
                 }
                 // Now it's guaranteed that there's data in the queue.
                 messageToBeSent = _CR_chatClientQueue.Dequeue();
             }
-            Debug.WriteLine("DEBUG: Queue filled! Going to send back to my client now.");
             // Don't need the lock until next iteration. 
             sendChatMessageToClient(messageToBeSent);
         }

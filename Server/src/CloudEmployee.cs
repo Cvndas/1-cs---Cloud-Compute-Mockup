@@ -80,7 +80,6 @@ internal class CloudEmployee
         Debug.Assert(_userResources != null);
         Debug.Assert(_userResources.stream != null);
         Debug.Assert(_userResources.client != null);
-        Debug.WriteLine(_debug_preamble + "TERMINATED THE CONNECTION WITH CLIENT");
         _userResources.stream.Dispose();
         _userResources.client.Dispose();
     }
@@ -115,7 +114,6 @@ internal class CloudEmployee
                     Monitor.Wait(_isWorkingLock);
                 }
                 Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
-                Debug.WriteLine(_debug_preamble + "has started working.");
                 // First wait on conditional variable _hasWork, and then
                 try {
                     RunCloudEmployeeStateMachine();
@@ -130,7 +128,6 @@ internal class CloudEmployee
                     DisposeOfClient();
                 }
                 _isWorking = false;
-                Debug.WriteLine(_debug_preamble + "has stopped working.");
                 CloudManager.Instance.AddToFreeQueueRemoveFromActiveList(this);
 
             }
@@ -146,16 +143,13 @@ internal class CloudEmployee
         while (true) {
             switch (_employeeState) {
                 case ServerStates.NO_CONNECTION:
-                    Debug.WriteLine(_debug_preamble + "State - NO_CONNECTION");
                     return;
 
                 case ServerStates.PROCESS_AUTHENTICATION_CHOICE:
-                    Debug.WriteLine(_debug_preamble + "State - PROCESSING_CHOICE");
                     ProcessAuthenticationChoice();
                     break;
 
                 case ServerStates.PROCESS_REGISTRATION:
-                    Debug.WriteLine(_debug_preamble + "State - PROCESS_REGISTRATION");
                     if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         SendFlag(ServerFlags.TOO_MANY_ATTEMPTS);
                         _employeeState = ServerStates.NO_CONNECTION;
@@ -164,12 +158,10 @@ internal class CloudEmployee
                     ProcessRegistration();
                     break;
                 case ServerStates.PROCESS_LOGIN:
-                    Debug.WriteLine(_debug_preamble + "State - PROCESS_LOGIN");
                     ProcessLogin();
                     break;
 
                 case ServerStates.IN_DASHBOARD:
-                    Debug.WriteLine(_debug_preamble + "State - IN_DASHBOARD");
                     // TODO - Manage the dashboard state machine
                     ProcessDashboard();
                     break;
@@ -184,7 +176,6 @@ internal class CloudEmployee
     private void ProcessAuthenticationChoice()
     {
         ClientFlags flagByte = ReceiveFlag();
-        Debug.WriteLine("DEBUG: Received flagByte: " + flagByte);
         if (flagByte == ClientFlags.REGISTER_REQUEST) {
             _employeeState = ServerStates.PROCESS_REGISTRATION;
             return;
@@ -202,10 +193,11 @@ internal class CloudEmployee
         }
     }
 
-    // Thread: Employee-x == self
+    /// <summary>
+    /// Thread: CloudEmployee-x == self
+    /// </summary>
     private ClientFlags ReceiveFlag()
     {
-        Debug.WriteLine(_debug_preamble + " Entered ReceiveFlag");
         byte[] buffer = new byte[1];
         if (_userResources?.stream == null) {
             throw new Exception("Stream as null.");
@@ -213,8 +205,9 @@ internal class CloudEmployee
         _userResources.stream.Read(buffer);
         return (ClientFlags)buffer[0];
     }
-
-    // Thread: Employee-x == self
+    /// <summary>
+    /// Thread: Employee-x == self
+    /// </summary>
     private void SendFlag(ServerFlags serverFlag)
     {
         byte[] buffer = new byte[1];
@@ -226,10 +219,11 @@ internal class CloudEmployee
         return;
     }
 
-    // Thread: Employee-x == self
+    /// <summary>
+    /// Thread: Employee-x == self
+    /// </summary>
     private void ProcessRegistration()
     {
-        Debug.WriteLine(_debug_preamble + "Entered ProcessRegistration");
         Debug.Assert(_employeeState == ServerStates.PROCESS_REGISTRATION);
 
         // Explained in ProcessLogin. Idea: least number of bytes needed to detect password that is too long.
@@ -314,7 +308,6 @@ internal class CloudEmployee
 
     private void ProcessLogin()
     {
-        Debug.WriteLine(_debug_preamble + "entered ProcessLogin()");
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
         if (_userResources == null) {
             throw new Exception(_debug_preamble + "userResources was null in ProcessLogin. this should not never happen");
@@ -352,7 +345,6 @@ internal class CloudEmployee
 
         // Handling all possible cases.
         if (usernamePasswordArray.Length != 2 || usernamePassword.IndexOf(" ") != usernamePassword.LastIndexOf(" ")) {
-            Debug.WriteLine(_debug_preamble + "Credentials were wrong: too little or too many arguments");
             SendFlag(ServerFlags.INCORRECT_CREDENTIALS_STRUCTURE);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
@@ -370,7 +362,6 @@ internal class CloudEmployee
 
         // If username is too long, it means it doesn't exist. 
         if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
-            Debug.WriteLine(_debug_preamble + "received username that is too long, or it didn't exist.");
             SendFlag(ServerFlags.USERNAME_DOESNT_EXIST);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
@@ -378,16 +369,13 @@ internal class CloudEmployee
         }
 
         if (!CloudManager.Instance.IsPasswordCorrect(username, password)) {
-            Debug.WriteLine(_debug_preamble, "user sent the wrong password.");
             SendFlag(ServerFlags.PASSWORD_INCORRECT);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
             return;
         }
-        Debug.WriteLine(_debug_preamble + "user provided the correct password for the username.");
 
         SendFlag(ServerFlags.OK);
-        Debug.WriteLine(_debug_preamble + "user logged in successfully. Moving to dashboard.");
         CloudManager.Instance.AddToLoggedInList(_userResources);
         _employeeState = ServerStates.IN_DASHBOARD;
         return;

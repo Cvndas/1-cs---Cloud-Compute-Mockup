@@ -106,7 +106,7 @@ internal class CloudManager
         foreach (var activeEmployee in _CR_activeEmployeeList) {
             Debug.Write(activeEmployee.ThreadId + " ");
         }
-        Debug.Write(", ");
+        Debug.Write(" ||| ");
         Debug.Write("Cloud's Free: ");
         foreach (var freeEmployee in _CR_freeEmployeeQueue) {
             Debug.Write(freeEmployee.ThreadId + " ");
@@ -123,7 +123,6 @@ internal class CloudManager
     /// <param name="userResources"></param>
     public void AddToUserQueue(UserResources userResources)
     {
-        Debug.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
         lock (_pendingUserQueueLock) {
             if (!(_CR_pendingUserQueue.Count > SystemRestrictions.MAX_USERS_IN_QUEUE)) {
                 _CR_pendingUserQueue.Enqueue(userResources);
@@ -289,9 +288,8 @@ internal class CloudManager
                     AssignToEmployee(user);
                 }
                 else {
-                    Debug.WriteLine("The user who was first in line was not connected anymore.");
+                    Debug.WriteLine("DEBUG: The user who was first in line was not connected anymore.");
                 }
-                Debug.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
             }
         }
     }

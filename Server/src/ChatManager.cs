@@ -61,7 +61,6 @@ class ChatManager
             _CR_unassignedUsersQueue.Enqueue(user);
             Monitor.PulseAll(_unassignedUsersQueueLock);
         }
-        Debug.WriteLine("CloudEmployee " + Environment.CurrentManagedThreadId + " added his user to the chat queue.");
     }
 
     public void AddChatEmployeeToActiveList(ChatEmployee employee)
@@ -147,17 +146,14 @@ class ChatManager
     public void FillAllChatClientQueues(byte[] messageIncludingFlag, int ThreadToIgnore)
     {
         lock (_activeChatEmployeesLock) {
-            Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has started filling queues");
             foreach (ChatEmployee employee in _CR_activeChatEmployees) {
                 if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
                     employee.EnqueueChatEmployeeQueue(messageIncludingFlag);
-                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has ADDED to a queue");
+                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has ADDED message to queue of " + employee._chatEmployeeThread.ManagedThreadId);
                 }
                 else {
-                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has IGNORED a queue");
                 }
             }
-            Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has FINISHED filling queues");
         }
         return;
     }

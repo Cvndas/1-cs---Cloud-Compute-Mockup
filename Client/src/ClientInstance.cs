@@ -96,7 +96,6 @@ class ClientInstance
             switch (_clientState) {
                 case ClientStates.NO_CONNECTION:
                     try {
-                        Debug.WriteLine("State - NO_CONNECTION");
                         ConnectToServer();
                     }
                     catch (Exception e) {
@@ -106,17 +105,14 @@ class ClientInstance
                     break;
 
                 case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
-                    Debug.WriteLine("State - CHOOSING_AUTHENTICATION_METHOD");
                     ChooseAuthenticateMethod();
                     break;
 
                 case ClientStates.REGISTERING:
-                    Debug.WriteLine("State - REGISTERING");
                     SendRegistrationInfo();
                     break;
 
                 case ClientStates.REGISTRATION_INFO_SENT:
-                    Debug.WriteLine("State - REGISTRATION_INFO_SENT");
                     HandleRegisterResponse();
                     if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
                         WriteLine("Too many registration attempts made.");
@@ -125,12 +121,10 @@ class ClientInstance
                     break;
 
                 case ClientStates.LOGGING_IN:
-                    Debug.WriteLine("State - LOGGING_IN");
                     SendLoginInfo();
                     break;
 
                 case ClientStates.LOGIN_INFO_SENT:
-                    Debug.WriteLine("State - LOGIN_INFO_SENT");
                     HandleLoginResponse();
                     if (_loginAttempts > SystemRestrictions.MAX_LOGIN_ATTEMPTS) {
                         WriteLine("Too many login attempts made.");
@@ -139,7 +133,6 @@ class ClientInstance
                     break;
 
                 case ClientStates.LOGGED_IN:
-                    Debug.WriteLine("State - LOGGED_IN");
                     ChooseDashboardOption();
                     break;
                 case ClientStates.IN_CHAT:
@@ -331,7 +324,6 @@ class ClientInstance
         ServerFlags serverFlag = (ServerFlags)buffer[0];
 
         if (serverFlag == ServerFlags.OK) {
-            WriteLine("Logged in successfully.");
             SetupUserSession();
             _clientState = ClientStates.LOGGED_IN;
             return;
@@ -390,7 +382,7 @@ class ClientInstance
         // TODO HIGH PRIORITY
         while (true) {
             WriteLine("[-] +++ +++ Welcome to the Dashboard +++ +++ [-]");
-            WriteLine("View local files: l | View files in cloud: c | Upload file: [u filename] | Download file: [u filename] | Enter Chat: chat");
+            WriteLine("View local files: l | View files in cloud: c | Upload file: [u filename] | Download file: [d filename] | Enter Chat: chat");
             string? userChoice = Console.ReadLine();
 
             if (userChoice == null) {
@@ -472,8 +464,8 @@ class ClientInstance
             throw new Exception("RunChatInterface: _stream was null.");
         }
 
-        Console.WriteLine("Welcome to the Cloud Chat, " + _username + ".");
-        Console.WriteLine("type \"quit\" to return to Dashboard.");
+        Console.Write("Welcome to the Cloud Chat, " + _username + ".");
+        Console.WriteLine(" (type \"quit\" to return to Dashboard.)");
         Thread receiveThread = new Thread(() => ReceiveMessagesJob(_stream));
         receiveThread.Start();
         string? userMessage = "";
@@ -485,6 +477,7 @@ class ClientInstance
             }
             if (userMessage == "quit") {
                 SendFlag(ClientFlags.TO_DASHBOARD);
+                _clientState = ClientStates.LOGGED_IN;
                 break;
             }
             if (userMessage.Length > SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH) {
@@ -520,6 +513,10 @@ class ClientInstance
         int bytesRead = 0;
         List<string> receivedMessages = new List<string>();
 
+        // TODO: CRITICAL BUG
+        // Bug: It's probably waiting on the .Read() when _userHasExitedChat is set to true.
+        // That's probably why it gets stuck. 
+        // Now is the time to learn how to properly shut down a thread in C#. 
         while (!_userHasExitedChat) {
             do {
                 bytesRead += stream.Read(receiveBuffer, 0, 1024);
@@ -527,13 +524,11 @@ class ClientInstance
             // Parse the data into a list of Messages, separated by strings that match SharedFlags.CHAT_MESSAGE
             string receivedData = Encoding.UTF8.GetString(receiveBuffer, 0, bytesRead);
             receivedMessages = receivedData.Split(SharedFlags.CHAT_MESSAGE.ToString()).ToList<string>();
-            Debug.WriteLine("DEBUG: Messages received: " + receivedMessages.Count + " messages.");
             foreach (string chatMessage in receivedMessages) {
                 Debug.Assert( (chatMessage[0] == (byte) SharedFlags.CHAT_MESSAGE) || (chatMessage[0] == (byte) ClientFlags.TO_DASHBOARD) );
                 string userMessage = chatMessage.Substring(1);
                 Console.WriteLine(userMessage);
             }
-            Debug.WriteLine("DEBUG: Those were all the chat messages");
 
             receivedMessages.Clear();
         }
