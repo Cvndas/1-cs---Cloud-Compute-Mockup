@@ -285,7 +285,7 @@ internal class CloudManager
                 if (UserIsStillActive(user)){
                     InformUserHeIsAssigned(user);
                     NotifyUsersOfQueueStatus();
-                    AssignToEmployee(_CR_pendingUserQueue.Dequeue());
+                    AssignToEmployee(user);
                 }
                 else {
                     Debug.WriteLine("The user who was first in line was not connected anymore.");

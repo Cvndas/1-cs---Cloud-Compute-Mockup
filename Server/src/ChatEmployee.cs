@@ -13,7 +13,7 @@ class ChatEmployee
     // ---------------------------------- // 
 
     // -------------- Concurrency -------- //
-    private bool _CR_threadIsReady;
+    // private bool _CR_threadIsReady;
     private readonly object? _threadIsReadyLock;
     // ----------------------------------- // 
 
@@ -30,7 +30,7 @@ class ChatEmployee
         _CR_isWorking = false;
         _isWorkingLock = new object();
 
-        _CR_threadIsReady = false;
+        // _CR_threadIsReady = false;
         _threadIsReadyLock = new object();
 
         _chatEmployeeThread = new(ChatEmployeeJob);
