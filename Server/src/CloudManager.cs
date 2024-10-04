@@ -63,10 +63,11 @@ internal class CloudManager
         return ret;
     }
 
-    public bool UserIsLoggedIn(string username){
-        lock(_loggedInUsersResourcesLock){
-            foreach(var user in _CR_loggedInUsersResources){
-                if (user.username == username){
+    public bool UserIsLoggedIn(string username)
+    {
+        lock (_loggedInUsersResourcesLock) {
+            foreach (var user in _CR_loggedInUsersResources) {
+                if (user.username == username) {
                     return true;
                 }
             }
@@ -120,7 +121,7 @@ internal class CloudManager
                 Monitor.PulseAll(_pendingUserQueueLock);
             }
             else {
-                Debug.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} didn't add user to CloudQueue, as the queue was full.");
+                Debug.WriteLine($"Thread {Environment.CurrentManagedThreadId} didn't add user to CloudQueue, as the queue was full.");
             }
             InformUserOfQueueStatus(userResources, _CR_pendingUserQueue.Count);
         }
@@ -153,7 +154,7 @@ internal class CloudManager
         lock (_registeredUsersFileLock) {
             JsonHelpers.AddKeyPair(_CR_registeredUsersFilePath, username, password);
         }
-        Debug.WriteLine("Employee " + Thread.CurrentThread.ManagedThreadId + " has added " + username + " to registeredUsers.json");
+        Debug.WriteLine("Employee " + Environment.CurrentManagedThreadId + " has added " + username + " to registeredUsers.json");
         return;
 
     }
@@ -268,7 +269,7 @@ internal class CloudManager
                 }
                 Debug.Assert(_CR_pendingUserQueue.Count != 0);
                 UserResources user = _CR_pendingUserQueue.Dequeue();
-                if (UserIsStillActive(user)){
+                if (UserIsStillActive(user)) {
                     InformUserHeIsAssigned(user);
                     NotifyUsersOfQueueStatus();
                     AssignToEmployee(user);
@@ -316,7 +317,7 @@ internal class CloudManager
     {
         Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
         if (!Monitor.IsEntered(_pendingUserQueueLock)) {
-            throw new Exception($"Thread {Thread.CurrentThread.ManagedThreadId} didn't own _pendingUserQueueLock");
+            throw new Exception($"Thread {Environment.CurrentManagedThreadId} didn't own _pendingUserQueueLock");
         }
         int queuePosition = 1;
 
@@ -333,7 +334,7 @@ internal class CloudManager
     {
         // Pop an employee from the freelist, assign it with the user resources, 
         // then notify it to start working
-        Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.CloudManagerThreadId);
+        Debug.Assert(Environment.CurrentManagedThreadId == ThreadRegistry.CloudManagerThreadId);
         Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
 
         CloudEmployee employee;

@@ -16,7 +16,7 @@ class JsonHelpers
             Dictionary<string, string> existingDataDictionary =
                 JsonSerializer.Deserialize<Dictionary<string, string>>(existingData)
                 ??
-                throw new Exception($"Thread {Thread.CurrentThread.ManagedThreadId}: JsonHelpers.KeyExists() dictionary was null");
+                throw new Exception($"Thread {Environment.CurrentManagedThreadId}: JsonHelpers.KeyExists() dictionary was null");
 
             if (existingDataDictionary.ContainsKey(username))
                 return true;
@@ -61,7 +61,7 @@ class JsonHelpers
                 Dictionary<string, string> existingDataDictionary =
                     JsonSerializer.Deserialize<Dictionary<string, string>>(existingData)
                     ??
-                    throw new Exception($"Thread {Thread.CurrentThread.ManagedThreadId} created a null dictionary in ValueMatchesKey.");
+                    throw new Exception($"Thread {Environment.CurrentManagedThreadId} created a null dictionary in ValueMatchesKey.");
                 string? valueInFile;
                 if (existingDataDictionary.TryGetValue(key, out valueInFile)) {
                     if (valueInFile == value) {

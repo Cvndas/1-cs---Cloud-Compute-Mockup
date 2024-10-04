@@ -48,7 +48,7 @@ class ChatEmployee
     // Thread: chatEmployee-x
     private void ChatEmployeeJob()
     {
-        _debugPreamble = $"DEBUG: ChatEmployee {Thread.CurrentThread.ManagedThreadId}: ";
+        _debugPreamble = $"DEBUG: ChatEmployee {Environment.CurrentManagedThreadId}: ";
         lock (_isWorkingLock) {
             if (_threadIsReadyLock == null) {
                 throw new Exception("How the fuck could this be null??");

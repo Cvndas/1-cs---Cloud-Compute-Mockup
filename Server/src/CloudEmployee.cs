@@ -51,7 +51,7 @@ internal class CloudEmployee
     // Thread: CloudManager
     public void AssignClient(UserResources userResources)
     {
-        Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.CloudManagerThreadId);
+        Debug.Assert(Environment.CurrentManagedThreadId == ThreadRegistry.CloudManagerThreadId);
         Debug.Assert(userResources != null);
         _userResources = userResources;
         _stream = _userResources.stream;
@@ -93,10 +93,10 @@ internal class CloudEmployee
         try {
             ChatManager.Instance.AddToUserQueue(_userResources);
         }
-        catch (Exception e){
+        catch (Exception e) {
             Error.WriteLine("Exception caught in TransferClientToChatManager: " + e.Message);
         }
-        finally{
+        finally {
             _transferedUserToChat = true;
             _employeeState = ServerStates.NO_CONNECTION;
         }
@@ -316,7 +316,7 @@ internal class CloudEmployee
     {
         Debug.WriteLine(_debug_preamble + "entered ProcessLogin()");
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
-        if (_userResources == null){
+        if (_userResources == null) {
             throw new Exception(_debug_preamble + "userResources was null in ProcessLogin. this should not never happen");
         }
 
@@ -361,7 +361,7 @@ internal class CloudEmployee
         string username = usernamePasswordArray[0];
         string password = usernamePasswordArray[1];
 
-        if (CloudManager.Instance.UserIsLoggedIn(username)){
+        if (CloudManager.Instance.UserIsLoggedIn(username)) {
             SendFlag(ServerFlags.ALREADY_LOGGED_IN);
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;

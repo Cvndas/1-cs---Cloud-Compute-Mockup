@@ -61,18 +61,20 @@ class ChatManager
             _CR_unassignedUsersQueue.Enqueue(user);
             Monitor.PulseAll(_unassignedUsersQueueLock);
         }
-        Debug.WriteLine("CloudEmployee " + Thread.CurrentThread.ManagedThreadId + " added his user to the chat queue.");
+        Debug.WriteLine("CloudEmployee " + Environment.CurrentManagedThreadId + " added his user to the chat queue.");
     }
 
-    public void AddChatEmployeeToActiveList(ChatEmployee employee){
-        lock (_activeChatEmployeesLock){
+    public void AddChatEmployeeToActiveList(ChatEmployee employee)
+    {
+        lock (_activeChatEmployeesLock) {
             _CR_activeChatEmployees.Add(employee);
             // TODO: Check if there's a mechanism that requires a pulse here
         }
     }
 
-    public void RemoveChatEmployeeFromActiveList(ChatEmployee employee){
-        lock(_activeChatEmployeesLock){
+    public void RemoveChatEmployeeFromActiveList(ChatEmployee employee)
+    {
+        lock (_activeChatEmployeesLock) {
             _CR_activeChatEmployees.Remove(employee);
         }
     }
@@ -120,7 +122,7 @@ class ChatManager
     // Thread: ChatManager
     private void ChatManagerJob()
     {
-        ThreadRegistry.ChatManagerThreadId = Thread.CurrentThread.ManagedThreadId;
+        ThreadRegistry.ChatManagerThreadId = Environment.CurrentManagedThreadId;
         while (true) {
             ChatEmployee chosenEmployee;
             // Wait for an employee to be available.

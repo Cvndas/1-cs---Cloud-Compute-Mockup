@@ -26,7 +26,7 @@ class ProgramServer
 
             // Construct the singletons
             CloudListener _listenerInstance = CloudListener.Instance; // Runs on main thread
-            ThreadRegistry.ListenerThreadId = Thread.CurrentThread.ManagedThreadId;
+            ThreadRegistry.ListenerThreadId = Environment.CurrentManagedThreadId;
             CloudManager cloudManagerInstance = CloudManager.Instance; // Launches separate thread
             ChatManager chatManagerInstance = ChatManager.Instance; // TODO CHAT: Launche separate thread.
 
