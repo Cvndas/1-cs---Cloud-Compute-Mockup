@@ -307,6 +307,7 @@ internal class CloudEmployee
             return;
         }
         SendFlag(ServerFlags.OK);
+        _userResources.username = username;
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
         return;
     }
@@ -315,6 +316,9 @@ internal class CloudEmployee
     {
         Debug.WriteLine(_debug_preamble + "entered ProcessLogin()");
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
+        if (_userResources == null){
+            throw new Exception(_debug_preamble + "userResources was null in ProcessLogin. this should not never happen");
+        }
 
         // Idea: Must be able to detect when the user sends a username or password that is too long.
         // Situation 1: username is too long | Since username comes first, even if the username takes up all bytes, it'll be fully transmitted,
@@ -357,6 +361,13 @@ internal class CloudEmployee
         string username = usernamePasswordArray[0];
         string password = usernamePasswordArray[1];
 
+        if (CloudManager.Instance.UserIsLoggedIn(username)){
+            SendFlag(ServerFlags.ALREADY_LOGGED_IN);
+            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            _loginAttempts += 1;
+            return;
+        }
+
         // If username is too long, it means it doesn't exist. 
         if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
             Debug.WriteLine(_debug_preamble + "received username that is too long, or it didn't exist.");
@@ -377,6 +388,7 @@ internal class CloudEmployee
 
         SendFlag(ServerFlags.OK);
         Debug.WriteLine(_debug_preamble + "user logged in successfully. Moving to dashboard.");
+        CloudManager.Instance.AddToLoggedInList(_userResources);
         _employeeState = ServerStates.IN_DASHBOARD;
         return;
     }
@@ -385,9 +397,8 @@ internal class CloudEmployee
     private void ProcessDashboard()
     {
         // The longest possible request is UPLOAD_REQUEST " " FileName " " FileSize
-        // TODO : Assert that it is indeed impossible for a user's request to exceed the buffersize, or for values to be 
-        // read differently from what the user sent.
-        int maximumRequestLength = sizeof(ClientFlags) + " ".Length + SystemRestrictions.MAX_FILENAME_LENGTH + " ".Length + sizeof(int);
+        // Added 10 bytes just to be safe.
+        int maximumRequestLength = sizeof(ClientFlags) + " ".Length + SystemRestrictions.MAX_FILENAME_LENGTH + " ".Length + sizeof(int) + 10;
         int bufferSize = maximumRequestLength + 1;
         byte[] buffer = new byte[bufferSize];
         int receivedBytes = 0;

@@ -47,5 +47,7 @@ public enum ServerFlags : byte
     DOWNLOAD_COMPLETE,
     DOWNLOAD_COMING,
     REQUEST_TOO_LONG,
+    QUEUE_POSITION,
+    ALREADY_LOGGED_IN,
 
 }

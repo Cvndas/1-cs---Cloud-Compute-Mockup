@@ -158,6 +158,38 @@ class ClientInstance
         _tcpClient = new TcpClient();
         _tcpClient.Connect(_serverIpEndPoint);
         _stream = _tcpClient.GetStream();
+
+        bool isAssigned = false;
+        int maxMessageSize = sizeof(byte) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length;
+
+        // Either you get OK, or you receive QUEUE_POSITION.
+        while (!isAssigned){
+            // if server sends OK, proceed.
+            byte[] buffer = new byte[maxMessageSize];
+            int bytesRead = 0;
+
+            do {
+                bytesRead += _stream.Read(buffer, 0, maxMessageSize);
+            } while (_stream.DataAvailable);
+
+            if ((ServerFlags) buffer[0] == ServerFlags.OK){
+                isAssigned = true;
+            }
+            else {
+                if ((ServerFlags) buffer[0] != ServerFlags.QUEUE_POSITION){
+                    throw new Exception("Invalid flag received from the server.");
+                }
+
+                int positionInQueue = int.Parse(Encoding.UTF8.GetString(buffer, 1, bytesRead - 1));
+                if (positionInQueue > SystemRestrictions.MAX_USERS_IN_QUEUE){
+                    WriteLine("Server is overloaded. Try again later.");
+                }
+                else {
+                    WriteLine("Position in queue: " + positionInQueue);
+                }
+            }
+        }
+
         _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
     }
 
@@ -308,6 +340,9 @@ class ClientInstance
         _loginAttempts += 1;
         // Unsuccessful cases
         switch (serverFlag) {
+            case ServerFlags.ALREADY_LOGGED_IN:
+                WriteLine("You are already logged in on another client.");
+                return;
             case ServerFlags.PASSWORD_INCORRECT:
                 WriteLine($"Incorrect password. You have {SystemRestrictions.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
                 _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;

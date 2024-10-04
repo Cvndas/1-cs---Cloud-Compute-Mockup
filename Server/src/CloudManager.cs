@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using CloudStates;
 
 namespace Server.src;
 internal class CloudManager
@@ -34,28 +36,42 @@ internal class CloudManager
     // Threads: CloudEmployee-x
     public void AddToLoggedInList(UserResources user)
     {
-        lock (_loggedInUsersLock) {
-            Debug.Assert(!_CR_loggedInUsers.Contains(user)); // Under no circumstances should a user be logged in twice.
-            _CR_loggedInUsers.Add(user);
+        lock (_loggedInUsersResourcesLock) {
+            Debug.Assert(!_CR_loggedInUsersResources.Contains(user)); // Under no circumstances should a user be logged in twice.
+            _CR_loggedInUsersResources.Add(user);
         }
     }
 
     // Threads: CloudEmployee-x
-    // TODO : Verify that this filters someone trying to bypass login by using the username of someone
-    // who was already logged in. (Idea: We're storing stream and socket info, those are unique.)
+    // If you, with your current TcpClient and Stream, are logged in,
+    // you may skip the registration stage and go straight into the dahsboard.
+
+    // TODO : Figure out where to fit this in. Probably need to modify both server and client state machines.
     public bool CanUserSkipRegistration(UserResources user)
     {
         bool ret = false;
-        lock (_loggedInUsersLock) {
-            if (_CR_loggedInUsers.Contains(user)) {
+        lock (_loggedInUsersResourcesLock) {
+            // Username isn't enough: check the network resources.
+            if (_CR_loggedInUsersResources.Contains(user)) {
                 ret = true;
                 // if (ChatManager.Instance.IsUserInChat(user)) {
-                    // throw new AttemptToLoginTwice();
+                // throw new AttemptToLoginTwice();
                 // }
             }
 
         }
         return ret;
+    }
+
+    public bool UserIsLoggedIn(string username){
+        lock(_loggedInUsersResourcesLock){
+            foreach(var user in _CR_loggedInUsersResources){
+                if (user.username == username){
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // Thread: CloudEmployee, when breaking connection with client, or when passing the client to the chat manager
@@ -93,17 +109,20 @@ internal class CloudManager
     }
 #endif
 
-    // Listener thread is the only thread that may access this
+    // Thread: Listener, main - When users connect to the server.
+    // Thread: ChatEmployee, when user exits the chat.
     public void AddToUserQueue(UserResources userResources)
     {
-        // Assert that it is the listening thread that is trying to add to the user queue
-        // TODO Chat : Remove this assert, and let chat employees fill the pending queue too
         Debug.WriteLine("DEBUG: Added a new user to _pendingUserQueue");
-        Debug.Assert(Thread.CurrentThread.ManagedThreadId == ThreadRegistry.ListenerThreadId);
         lock (_pendingUserQueueLock) {
-            // Error.WriteLine("Thread " + Thread.CurrentThread.ManagedThreadId + " acquired lock of _pendingUserQueue");
-            _CR_pendingUserQueue.Enqueue(userResources);
-            Monitor.PulseAll(_pendingUserQueueLock);
+            if (!(_CR_pendingUserQueue.Count > SystemRestrictions.MAX_USERS_IN_QUEUE)) {
+                _CR_pendingUserQueue.Enqueue(userResources);
+                Monitor.PulseAll(_pendingUserQueueLock);
+            }
+            else {
+                Debug.WriteLine($"Thread {Thread.CurrentThread.ManagedThreadId} didn't add user to CloudQueue, as the queue was full.");
+            }
+            InformUserOfQueueStatus(userResources, _CR_pendingUserQueue.Count);
         }
         return;
     }
@@ -162,8 +181,8 @@ internal class CloudManager
     // If the user enters the chat, then quits the chat, they end up back in the pending user queue.
     // When they are matched with a CloudEmployee, the employee checks if they're already logged in,
     // and registration is skipped.
-    private List<UserResources> _CR_loggedInUsers;
-    private readonly object _loggedInUsersLock;
+    private List<UserResources> _CR_loggedInUsersResources;
+    private readonly object _loggedInUsersResourcesLock;
     // -------------------------------------------- //
 
 
@@ -219,8 +238,8 @@ internal class CloudManager
         _CR_pendingUserQueue = new Queue<UserResources>();
         _pendingUserQueueLock = new object();
 
-        _CR_loggedInUsers = new List<UserResources>(ServerRules.MAX_LOGGED_IN_USERS);
-        _loggedInUsersLock = new object();
+        _CR_loggedInUsersResources = new List<UserResources>(ServerRules.MAX_LOGGED_IN_USERS);
+        _loggedInUsersResourcesLock = new object();
 
         _registeredUsersFileLock = new object();
 
@@ -262,10 +281,64 @@ internal class CloudManager
                     Monitor.Wait(_pendingUserQueueLock);
                 }
                 Debug.Assert(_CR_pendingUserQueue.Count != 0);
-                AssignToEmployee(_CR_pendingUserQueue.Dequeue());
+                UserResources user = _CR_pendingUserQueue.Dequeue();
+                if (UserIsStillActive(user)){
+                    InformUserHeIsAssigned(user);
+                    NotifyUsersOfQueueStatus();
+                    AssignToEmployee(_CR_pendingUserQueue.Dequeue());
+                }
+                else {
+                    Debug.WriteLine("The user who was first in line was not connected anymore.");
+                }
                 Debug.WriteLine("DEBUG: Assigned a user from _pendingUserQueue to a CloudEmployee");
             }
         }
+    }
+
+    // Thread: CloudManager
+    private bool UserIsStillActive(UserResources user)
+    {
+        // Protocol: if a user quits 
+        return user.client.Connected;
+    }
+
+    // Thread: CloudManager - Called when an active user is popped from the queue.
+    private void InformUserHeIsAssigned(UserResources user)
+    {
+        byte[] buffer = new byte[1];
+        buffer[0] = (byte)ServerFlags.OK;
+        user.stream.Write(buffer);
+    }
+
+    // Thread: CloudManager - Sent to everyone in the queue after assigning the head
+    // Thread: Main/Listener - Sent to newly added user after they've been added to the queue.
+    private void InformUserOfQueueStatus(UserResources user, int queuePosition)
+    {
+        int messageSize = sizeof(byte) + queuePosition.ToString().Length;
+        byte[] buffer = new byte[messageSize];
+        byte[] queuePositionBytes = Encoding.UTF8.GetBytes(queuePosition.ToString());
+        buffer[0] = (byte)ServerFlags.QUEUE_POSITION;
+        Array.Copy(queuePositionBytes, 0, buffer, 1, queuePositionBytes.Length);
+
+        user.stream.Write(buffer);
+    }
+
+    // Thread: Cloud Manager, after dequeuing to grab the first-in-line user 
+    // Thread: ChatEmployee, after returning the user into the queue
+    // Thread: Main, upon adding newly connected users into the queue.
+    private void NotifyUsersOfQueueStatus()
+    {
+        Debug.Assert(Monitor.IsEntered(_pendingUserQueueLock));
+        if (!Monitor.IsEntered(_pendingUserQueueLock)) {
+            throw new Exception($"Thread {Thread.CurrentThread.ManagedThreadId} didn't own _pendingUserQueueLock");
+        }
+        int queuePosition = 1;
+
+        foreach (UserResources user in _CR_pendingUserQueue) {
+            InformUserOfQueueStatus(user, queuePosition);
+            queuePosition += 1;
+        }
+
     }
 
     // Thread: CloudManager

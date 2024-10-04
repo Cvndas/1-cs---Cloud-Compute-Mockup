@@ -64,6 +64,7 @@ class ChatEmployee
                 Monitor.Wait(_isWorkingLock);
                 Debug.WriteLine(_debugPreamble + "has received an assignment.");
                 try {
+
                     ChatManager.Instance.AddChatEmployeeToActiveList(this);
                     _CR_isWorking = true;
 
@@ -74,6 +75,7 @@ class ChatEmployee
                     Console.WriteLine("Incoming message: " + Encoding.UTF8.GetString(buffer));
 
                     Thread.Sleep(100000);
+
                 }
                 catch (Exception e) {
                     Error.WriteLine("Error in ChatEmployeeJob by " + _debugPreamble + e.Message);
@@ -93,8 +95,9 @@ class ChatEmployee
     public void ConnectWithClient(UserResources userResources)
     {
         // TODO: backport this to ChatEmployee. 
-        // Fixes a very improbable, probably impossible, race condition 
-        // where the thread is not actively waiting for tasks to be given 
+        // Fixes a very improbable, probably impossible on all hardware that C#
+        // runs on, race condition... 
+        // ... where the thread is not actively waiting for tasks to be given 
         // when a task is "Monitor.Pulse()"d to the thread.
 
         // Requires an additional "Thread is ready" lock to be created, which
@@ -106,6 +109,5 @@ class ChatEmployee
             // Notify that the userResources are assigned, and the thread can start working.
             Monitor.Pulse(_isWorkingLock);
         }
-
     }
 }
