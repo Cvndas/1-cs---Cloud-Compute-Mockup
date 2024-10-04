@@ -85,6 +85,7 @@ class ChatEmployee
                 Debug.WriteLine(_debugPreamble + "has received an assignment.");
                 try {
                     // ++++++++++++++ Task has been assigned ++++++++++++++ // 
+                    _connectionWithClientIsActive = true;
                     lock (_chatClientQueueLock) {
                         // Start fresh, don't show new user messages that may have been queued up.
                         _CR_chatClientQueue.Clear();
@@ -176,11 +177,13 @@ class ChatEmployee
             lock (_chatClientQueueLock) {
                 if (_CR_chatClientQueue.Count < 1) {
                     // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
+                    Debug.WriteLine("DEBUG: waiting for my queue to be filled before I can send back to my client");
                     Monitor.Wait(_chatClientQueueLock);
                 }
                 // Now it's guaranteed that there's data in the queue.
                 messageToBeSent = _CR_chatClientQueue.Dequeue();
             }
+            Debug.WriteLine("DEBUG: Queue filled! Going to send back to my client now.");
             // Don't need the lock until next iteration. 
             sendChatMessageToClient(messageToBeSent);
         }
@@ -250,7 +253,7 @@ class ChatEmployee
         // Else, all correct. Go ahead and fill up all the queues.
         else {
             ChatManager.Instance.FillAllChatClientQueues(buffer, _chatEmployeeThread.ManagedThreadId);
-            return false;
+            return true;
         }
     }
 
