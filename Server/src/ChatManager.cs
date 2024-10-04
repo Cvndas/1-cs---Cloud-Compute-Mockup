@@ -151,6 +151,7 @@ class ChatManager
             foreach (ChatEmployee employee in _CR_activeChatEmployees) {
                 if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
                     employee.EnqueueChatEmployeeQueue(messageIncludingFlag);
+                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has ADDED to a queue");
                 }
                 else {
                     Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has IGNORED a queue");

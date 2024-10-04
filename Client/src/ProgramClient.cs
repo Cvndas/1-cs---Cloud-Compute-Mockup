@@ -17,6 +17,10 @@ class ProgramClient
         Console.WriteLine("Welcome (Release)");
 #endif
 
+        // Enables debug prints in standard output
+        var myWriter = new TextWriterTraceListener(Out);
+        Trace.Listeners.Add(myWriter);
+
         ClientInstance instance = ClientInstance.Instance;
         Debug.Assert(instance != null);
         instance?.RunClient();

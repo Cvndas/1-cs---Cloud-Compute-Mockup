@@ -518,8 +518,10 @@ class ClientInstance
         byte[] receiveBuffer = new byte[bufferSize];
         int bytesRead = 0;
         List<string> receivedMessages = new List<string>();
+        Debug.WriteLine("DEBUG: chat is about to be ready to receive messages");
 
-        while (_userHasExitedChat) {
+        while (!_userHasExitedChat) {
+            Debug.WriteLine("DEBUG: Chat is ready to receive messages.");
             do {
                 bytesRead += stream.Read(receiveBuffer, 0, 1024);
             } while (stream.DataAvailable);
@@ -528,7 +530,7 @@ class ClientInstance
             receivedMessages = receivedData.Split(SharedFlags.CHAT_MESSAGE.ToString()).ToList<string>();
             Debug.WriteLine("DEBUG: Messages received: " + receivedMessages.Count + " messages.");
             foreach (string chatMessage in receivedMessages) {
-                Debug.Assert(chatMessage[0].ToString() == SharedFlags.CHAT_MESSAGE.ToString());
+                Debug.Assert( (chatMessage[0].ToString() == SharedFlags.CHAT_MESSAGE.ToString()) || (chatMessage[0].ToString() == ClientFlags.TO_DASHBOARD.ToString()));
                 string userMessage = chatMessage.Substring(1);
                 Console.WriteLine(userMessage);
             }

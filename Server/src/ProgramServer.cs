@@ -21,6 +21,7 @@ class ProgramServer
         WriteLine("Welcome (Release)");
 #endif
 
+        // Enables debug prints in standard output
         var myWriter = new TextWriterTraceListener(Out);
         Trace.Listeners.Add(myWriter);
 
