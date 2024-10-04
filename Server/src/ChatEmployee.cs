@@ -14,7 +14,7 @@ class ChatEmployee
 
     // -------------- Concurrency -------- //
     private bool _CR_threadIsReady;
-    private readonly object _threadIsReadyLock;
+    private readonly object? _threadIsReadyLock;
     // ----------------------------------- // 
 
     private Thread _chatEmployeeThread;
@@ -22,6 +22,7 @@ class ChatEmployee
     private NetworkStream? _stream;
     private string? _debugPreamble;
 
+    // Thread: Main, created upon program startup.
     public ChatEmployee()
     {
         // TODO implement constructor, set up thread, set up state machine, etc. More busy work
@@ -37,14 +38,21 @@ class ChatEmployee
             _chatEmployeeThread.Start();
             // Wait for the thread to be ready.
             Monitor.Wait(_threadIsReadyLock);
+            _threadIsReadyLock = null; // Micro optimization that saves the slightest amount of memory.
+            // Like no more than a byte, probably. Just wanted to give it a try as practice for when
+            // this sort of thing actually becomes useful.
         }
 
     }
 
+    // Thread: chatEmployee-x
     private void ChatEmployeeJob()
     {
         _debugPreamble = $"DEBUG: ChatEmployee {Thread.CurrentThread.ManagedThreadId}: ";
         lock (_isWorkingLock) {
+            if (_threadIsReadyLock == null) {
+                throw new Exception("How the fuck could this be null??");
+            }
             lock (_threadIsReadyLock) {
                 // Acquired the "_isWorking" lock, therefore is ready to accept tasks. 
                 // Outside while true, so this is only run on startup.
@@ -84,10 +92,13 @@ class ChatEmployee
     // Thread: ChatManager
     public void ConnectWithClient(UserResources userResources)
     {
-        // TODO: backport this to ChatEmployee, if this works. 
-        // Should fix the race condition of the thread not being active 
-        // yet by the time that the connection
-        // is made. 
+        // TODO: backport this to ChatEmployee. 
+        // Fixes a very improbable, probably impossible, race condition 
+        // where the thread is not actively waiting for tasks to be given 
+        // when a task is "Monitor.Pulse()"d to the thread.
+
+        // Requires an additional "Thread is ready" lock to be created, which
+        // could theoretically be destroyed? Maybe by setting it to null?
 
         lock (_isWorkingLock) {
             _userResources = userResources;
