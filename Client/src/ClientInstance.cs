@@ -153,7 +153,7 @@ class ClientInstance
         _stream = _tcpClient.GetStream();
 
         bool isAssigned = false;
-        int maxMessageSize = sizeof(byte) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length;
+        int maxMessageSize = sizeof(ServerFlags) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length;
 
         // Either you get OK, or you receive QUEUE_POSITION.
         while (!isAssigned) {
@@ -164,23 +164,35 @@ class ClientInstance
             do {
                 bytesRead += _stream.Read(buffer, 0, maxMessageSize);
             } while (_stream.DataAvailable);
+            // TODO URGENT: It may be that the server sends both QUEUE_POSITION and OK in one go, in which case
+            // those messages must be split, and processed in a foreach(). 
 
-            if ((ServerFlags)buffer[0] == ServerFlags.OK) {
-                isAssigned = true;
-            }
-            else {
-                if ((ServerFlags)buffer[0] != ServerFlags.QUEUE_POSITION) {
-                    throw new Exception("Invalid flag received from the server.");
-                }
+            string bufferString = Encoding.UTF8.GetString(buffer);
+            // PROBLEM URGENT: These are not unique identifiers. They also exist in the string, probably. 
+            char[] delimiters = { (char)ServerFlags.QUEUE_POSITION, (char)ServerFlags.OK };
+            List<string> allResponsesString = bufferString.Split(delimiters).ToList<string>();
+            Debug.WriteLine("DEBUG TESTING ConnectToServer() MULTIPLE RESPONSE: Length is " + allResponsesString.Count);
 
-                int positionInQueue = int.Parse(Encoding.UTF8.GetString(buffer, 1, bytesRead - 1));
-                if (positionInQueue > SystemRestrictions.MAX_USERS_IN_QUEUE) {
-                    WriteLine("Server is overloaded. Try again later.");
+            foreach (string response in allResponsesString) {
+                byte[] responseBytes = Encoding.UTF8.GetBytes(response);
+                if ((ServerFlags)responseBytes[0] == ServerFlags.OK) {
+                    isAssigned = true;
                 }
                 else {
-                    WriteLine("Position in queue: " + positionInQueue);
+                    if ((ServerFlags)responseBytes[0] != ServerFlags.QUEUE_POSITION) {
+                        throw new Exception("Invalid flag received from the server.");
+                    }
+                    int positionInQueue = int.Parse(Encoding.UTF8.GetString(responseBytes, 1, responseBytes.Length - 1));
+                    if (positionInQueue > SystemRestrictions.MAX_USERS_IN_QUEUE) {
+                        WriteLine("Server is overloaded. Try again later.");
+                    }
+                    else {
+                        WriteLine("Position in queue: " + positionInQueue);
+                    }
                 }
+
             }
+
         }
 
         _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
@@ -214,6 +226,7 @@ class ClientInstance
         int attempts = 0;
         while (true) {
             Write("[Login: l | Register: r | Quit: q] ");
+            WriteLine();
             string? choice = ReadLine() ?? throw new Exception("Failed to read [userchoice] in ChooseAuthenticateMethod()");
             WriteLine();
 
@@ -451,7 +464,6 @@ class ClientInstance
     /// Volatile to prevent stale-reads. 
     /// Only ever set by RunChatInterface(), only ever read by ReceiveMessagesJob
     /// </summary>
-    private volatile bool _userHasExitedChat = false;
     private void RunChatInterface()
     {
         // string hwText = "Hello Chat!";
@@ -459,7 +471,8 @@ class ClientInstance
         // _stream!.Write(buffer);
         // _clientState = ClientStates.PROGRAM_CLOSED;
 
-        // Idea: Run a thread that displays messages from other people, while you yourself just ReadLine() messages.
+        // Idea: Main thread receives user input and sends it to the server
+        //       helper thread receives messages from the server and displays it to the user.
         if (_stream == null) {
             throw new Exception("RunChatInterface: _stream was null.");
         }
@@ -467,31 +480,36 @@ class ClientInstance
         Console.Write("Welcome to the Cloud Chat, " + _username + ".");
         Console.WriteLine(" (type \"quit\" to return to Dashboard.)");
         Thread receiveThread = new Thread(() => ReceiveMessagesJob(_stream));
-        receiveThread.Start();
-        string? userMessage = "";
-        while (true) {
-            Console.Write("Send message: ");
-            userMessage = Console.ReadLine();
-            if (userMessage == null) {
-                throw new Exception("User's input was null in RunChatInterface");
-            }
-            if (userMessage == "quit") {
-                SendFlag(ClientFlags.TO_DASHBOARD);
-                _clientState = ClientStates.LOGGED_IN;
-                break;
-            }
-            if (userMessage.Length > SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH) {
-                // TODO 
-                Console.WriteLine("Chat message too long. Max length: " + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH);
-            }
-            else {
-                SendChatMessage(userMessage);
-            }
+        try {
 
-
+            receiveThread.Start();
+            string? userMessage = "";
+            while (true) {
+                Console.Write("Send message: ");
+                userMessage = Console.ReadLine();
+                if (userMessage == null) {
+                    throw new Exception("User's input was null in RunChatInterface");
+                }
+                if (userMessage == "quit") {
+                    SendFlag(ClientFlags.TO_DASHBOARD);
+                    _clientState = ClientStates.LOGGED_IN;
+                    break;
+                }
+                if (userMessage.Length > SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH) {
+                    // TODO 
+                    Console.WriteLine("Chat message too long. Max length: " + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH);
+                }
+                else {
+                    SendChatMessage(userMessage);
+                }
+            }
+            receiveThread.Join();
         }
-        _userHasExitedChat = true;
-        receiveThread.Join();
+        catch (ThreadInterruptedException) {
+            Debug.WriteLine("Caught Thread Interrupt.");
+
+            WriteLine("Caught Thread Interrupt.");
+        }
         Console.WriteLine("Returning to dashboard.");
     }
     private void SendChatMessage(string message)
@@ -499,38 +517,43 @@ class ClientInstance
         int bufferSize = sizeof(SharedFlags) + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH;
         byte[] buffer = new byte[bufferSize];
         byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-        buffer[0] = (byte) SharedFlags.CHAT_MESSAGE;
+        buffer[0] = (byte)SharedFlags.CHAT_MESSAGE;
         Array.Copy(messageBytes, 0, buffer, 1, messageBytes.Count());
-        if (_stream == null){
+        if (_stream == null) {
             throw new Exception("_stream was null in SendChatMessage");
         }
         _stream.Write(buffer);
     }
+
+    /// <summary>
+    /// Thread: Chat Client Helper thread. <br/>Launched in RunChatInterface<br/>Joined in RunChatInterface.
+    /// </summary>
     private void ReceiveMessagesJob(NetworkStream stream)
     {
+        bool _userHasExitedChat = false;
         int bufferSize = 1024;
         byte[] receiveBuffer = new byte[bufferSize];
         int bytesRead = 0;
-        List<string> receivedMessages = new List<string>();
+        List<string> receivedMessagesWithFlags = new List<string>();
 
-        // TODO: CRITICAL BUG
-        // Bug: It's probably waiting on the .Read() when _userHasExitedChat is set to true.
-        // That's probably why it gets stuck. 
-        // Now is the time to learn how to properly shut down a thread in C#. 
         while (!_userHasExitedChat) {
             do {
                 bytesRead += stream.Read(receiveBuffer, 0, 1024);
             } while (stream.DataAvailable);
             // Parse the data into a list of Messages, separated by strings that match SharedFlags.CHAT_MESSAGE
             string receivedData = Encoding.UTF8.GetString(receiveBuffer, 0, bytesRead);
-            receivedMessages = receivedData.Split(SharedFlags.CHAT_MESSAGE.ToString()).ToList<string>();
-            foreach (string chatMessage in receivedMessages) {
-                Debug.Assert( (chatMessage[0] == (byte) SharedFlags.CHAT_MESSAGE) || (chatMessage[0] == (byte) ClientFlags.TO_DASHBOARD) );
-                string userMessage = chatMessage.Substring(1);
-                Console.WriteLine(userMessage);
+            char[] delimiters = { (char)SharedFlags.CHAT_MESSAGE, (char)ClientFlags.TO_DASHBOARD };
+            receivedMessagesWithFlags = receivedData.Split(delimiters).ToList<string>();
+            foreach (string chatMessageWithFlag in receivedMessagesWithFlags) {
+                Debug.Assert((Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)SharedFlags.CHAT_MESSAGE) || (Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)ClientFlags.TO_DASHBOARD));
+                if (chatMessageWithFlag[0] == (byte)ClientFlags.TO_DASHBOARD) {
+                    _userHasExitedChat = true;
+                    break;
+                }
+                string chatMessageWithoutFlag = chatMessageWithFlag.Substring(1);
+                Console.WriteLine(chatMessageWithoutFlag);
             }
-
-            receivedMessages.Clear();
+            receivedMessagesWithFlags.Clear();
         }
         return;
     }

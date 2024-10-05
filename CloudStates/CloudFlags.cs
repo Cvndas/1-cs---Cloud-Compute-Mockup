@@ -48,6 +48,7 @@ public enum ServerFlags : byte
     REQUEST_TOO_LONG,
     QUEUE_POSITION,
     ALREADY_LOGGED_IN,
+    IGNORE,
 }
 
 public enum SharedFlags : byte

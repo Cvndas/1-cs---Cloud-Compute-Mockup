@@ -9,7 +9,6 @@ class ChatEmployee
     // ------------ Concurrency ---------- // 
     // Accessed by ChatManager when assigned to a user
     // Accessed by self when sending the user back to the CloudManager
-    private bool _CR_isWorking;
     private readonly object _isWorkingLock;
     // ---------------------------------- // 
 
@@ -18,9 +17,15 @@ class ChatEmployee
     private readonly object? _threadIsReadyLock;
     // ----------------------------------- // 
 
+    // ------------ Concurrency ---------- //
+    // Both the main thread and the helper thread of the chat employee may send over the socket
+    // at once.
+    private NetworkStream? _stream;
+    private readonly object _streamLock;
+    // ----------------------------------- // 
+
     public Thread _chatEmployeeThread;
     private UserResources? _userResources;
-    private NetworkStream? _stream;
     private string? _debugPreamble;
 
     // --------- Concurrency ------------- //
@@ -33,16 +38,13 @@ class ChatEmployee
     // ---------------------------------- // 
 
     /// <summary>
-    /// Used by the current ChatEmployee's ListenToUser thread, to shut down its SendToUserThread;
+    /// Set by ChatEmployee's main thread, read by ChatEmployee's helper thread.
     /// </summary>
     private volatile bool _connectionWithClientIsActive;
 
     // Thread: Main, created upon program startup.
     public ChatEmployee()
     {
-        // TODO implement constructor, set up thread, set up state machine, etc. More busy work
-        // that I've already done before. Good practice for learning the language.
-        _CR_isWorking = false;
         _isWorkingLock = new object();
 
         // _CR_threadIsReady = false;
@@ -52,6 +54,8 @@ class ChatEmployee
         _CR_chatClientQueue = new Queue<byte[]>();
 
         _connectionWithClientIsActive = false;
+
+        _streamLock = new object();
 
         _chatEmployeeThread = new(ChatEmployeeJob);
         lock (_threadIsReadyLock) {
@@ -65,6 +69,21 @@ class ChatEmployee
 
     }
 
+    /// <summary>
+    /// Thread: ChatManager
+    /// </summary>
+    public void ConnectWithClient(UserResources userResources)
+    {
+        // TODO: backport this to ChatEmployee. 
+
+        lock (_isWorkingLock) {
+            _userResources = userResources;
+            _stream = _userResources.stream;
+            // Notify that the userResources are assigned, and the thread can start working.
+            Monitor.Pulse(_isWorkingLock); // Wake up ChatEmployeeJob()
+        }
+    }
+
     // Thread: chatEmployee-x
     private void ChatEmployeeJob()
     {
@@ -74,40 +93,35 @@ class ChatEmployee
                 throw new Exception("How the fuck could this be null??");
             }
             lock (_threadIsReadyLock) {
-                // Acquired the "_isWorking" lock, therefore is ready to accept tasks. 
-                // Outside while true, so this is only run on startup.
-                Monitor.Pulse(_threadIsReadyLock);
+                Monitor.Pulse(_threadIsReadyLock); // Tell constructor that thread is ready.
             }
 
-            while (true) {
-                // Wait to be assigned a task.
-                Monitor.Wait(_isWorkingLock);
+            while (true) { // Thread loop: Each iteration represents the lifetime of a connection.
+                Monitor.Wait(_isWorkingLock); // Wait to be woken up by ConnectWithClient()
                 try {
-                    // ++++++++++++++ Task has been assigned ++++++++++++++ // 
                     _connectionWithClientIsActive = true;
                     lock (_chatClientQueueLock) {
-                        // Start fresh, don't show new user messages that may have been queued up.
+                        // Start fresh, don't show new user messages that may have been queued up from previous iterations.
                         _CR_chatClientQueue.Clear();
                     }
 
+                    // Inform the ChatManager that this thread needs to receive chat messages
                     ChatManager.Instance.AddChatEmployeeToActiveList(this);
-                    _CR_isWorking = true;
 
-                    // The current thread is the ListenToUser thread, which fills up collegue queues.
-                    // Now launching the SendToUser thread, which sends a message to the user when
-                    // the queue has a message put in it by collueagues.
                     Thread sendToUserThread = new Thread(sendToUserJob);
                     sendToUserThread.Start();
-                    bool userHasExitedChat = false;
 
-                    while (!userHasExitedChat) {
+                    while (_connectionWithClientIsActive) {
                         // ProcessUserChatMessage returns false if it received "quit"
-                        if (!ProcessUserChatMessage()) {
-                            userHasExitedChat = true;
+                        if (ProcessUserChatMessage() == ClientFlags.TO_DASHBOARD) {
+                            _connectionWithClientIsActive = false;
+                            byte[] interruptHelperThread = new byte[1];
+                            interruptHelperThread[0] = (byte)ServerFlags.IGNORE;
+                            ChatManager.Instance.FillAllChatClientQueues(interruptHelperThread, -1);
                         }
                     }
-                    _connectionWithClientIsActive = false;
 
+                    // Thread should be closed by ProcessUserChatMessages() when it processes a TO_DASHBOARD flag. 
                     sendToUserThread.Join();
                 }
                 catch (Exception e) {
@@ -123,33 +137,10 @@ class ChatEmployee
                     throw new Exception("ChatEmployee " + Environment.CurrentManagedThreadId + "'s _userResources was null in ChatEmployeeJob");
                 }
                 CloudManager.Instance.AddToUserQueue(_userResources);
-                _CR_isWorking = false;
             }
-            // +++++++++++++++++++++++ Task has been released +++++++++++++++++++++++ // 
         }
     }
 
-    /// <summary>
-    /// Thread: ChatManager
-    /// </summary>
-    public void ConnectWithClient(UserResources userResources)
-    {
-        // TODO: backport this to ChatEmployee. 
-        // Fixes a very improbable, probably impossible on all hardware that C#
-        // runs on, race condition... 
-        // ... where the thread is not actively waiting for tasks to be given 
-        // when a task is "Monitor.Pulse()"d to the thread.
-
-        // Requires an additional "Thread is ready" lock to be created, which
-        // could theoretically be destroyed? Maybe by setting it to null?
-
-        lock (_isWorkingLock) {
-            _userResources = userResources;
-            _stream = _userResources.stream;
-            // Notify that the userResources are assigned, and the thread can start working.
-            Monitor.Pulse(_isWorkingLock);
-        }
-    }
 
     /// <summary>
     /// Thread: Another chat employee. Pulses that there is a message to be sent to the client. <br/>
@@ -164,61 +155,28 @@ class ChatEmployee
     }
 
     /// <summary>
-    /// Thread: ChatEmployee's sendToUserThread, which is his helper thread
-    /// </summary>
-    public void sendToUserJob()
-    {
-        while (_connectionWithClientIsActive) {
-            byte[] messageToBeSent;
-            lock (_chatClientQueueLock) {
-                if (_CR_chatClientQueue.Count < 1) {
-                    // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
-                    Monitor.Wait(_chatClientQueueLock);
-                }
-                // Now it's guaranteed that there's data in the queue.
-                messageToBeSent = _CR_chatClientQueue.Dequeue();
-            }
-            // Don't need the lock until next iteration. 
-            sendChatMessageToClient(messageToBeSent);
-        }
-    }
-
-    /// <summary>
     /// Thread: ChatEmployee's sendToUserThread, which is his helper thread <br/>
     /// Note: This function adds its own CHAT_MESSAGE flag, so this doesn't have to be done by the 
     /// main thread.
     /// </summary>
-    private void sendChatMessageToClient(byte[] messageWithFlag)
+    private void SendChatMessageToClient(byte[] messageWithFlag)
     {
         if (_stream == null) {
             throw new Exception("_stream was null in chat employee " + _chatEmployeeThread.ManagedThreadId + "'s sendChatMessageToClient(), which runs on its own helper thread.");
         }
-        _stream.Write(messageWithFlag);
+        lock (_streamLock) {
+            _stream.Write(messageWithFlag);
+        }
     }
 
     /// <summary>
     /// Runs on ChatEmployee's main thread. <br/>
     /// Returns true if normal message was received <br/>
-    /// Returns false if user wrote quit, which sends the TO_DASHBOARD flag internally <br/>
+    /// Returns false if received TO_DASHBOARD<br/>
     /// </summary>
     /// <returns></returns>
-    private bool ProcessUserChatMessage()
+    private ClientFlags ProcessUserChatMessage()
     {
-        // Note about reading and writing on the same NetworkStream without synchronization, 
-        // Source: https://learn.microsoft.com/en-us/dotnet/api/system.net.sockets.networkstream?view=net-8.0
-
-        // "Read and write operations can be performed simultaneously on 
-        // an instance of the NetworkStream class without the need for 
-        // synchronization. As long as there is one unique thread for the 
-        // write operations and one unique thread for the read operations, 
-        // there will be no cross-interference between read and write threads 
-        // and no synchronization is required."
-
-        // This function needs to verify that the user has stayed within the bounds. 
-        // Doesn't have to send a response to the user, as unmodified client
-        // prevents this, but shouldn't fill the queue with such a garbage message
-        // if the client is modified and sending unintended data.
-
         if (_stream == null) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "'s stream was null in ProcessUserChatMessage.");
         }
@@ -232,12 +190,18 @@ class ChatEmployee
         } while (_stream.DataAvailable);
 
         if ((ClientFlags)buffer[0] == ClientFlags.TO_DASHBOARD) {
-            return false;
+            // Client expects a ClientFlags.TO_DASHBOARD to be returned. Otherwise it will remain stuck in listening.            
+            byte[] responseBuffer = new byte[1];
+            responseBuffer[0] = (byte)ClientFlags.TO_DASHBOARD;
+            lock (_streamLock) {
+                _stream.Write(responseBuffer, 0, 1);
+            }
+            return ClientFlags.TO_DASHBOARD;
         }
 
         // If message is too long, just ignore it.
         else if (bytesReceived > maxMessageSize) {
-            return true;
+            return (ClientFlags)0;
         }
 
         // If client doesn't send the correct flag for some reason
@@ -247,7 +211,33 @@ class ChatEmployee
         // Else, all correct. Go ahead and fill up all the queues.
         else {
             ChatManager.Instance.FillAllChatClientQueues(buffer, _chatEmployeeThread.ManagedThreadId);
-            return true;
+            return (ClientFlags)0;
+        }
+    }
+
+    /// <summary>
+    /// Thread: ChatEmployee's sendToUserThread, which is his helper thread
+    /// </summary>
+    public void sendToUserJob()
+    {
+        while (true) {
+            byte[] messageToBeSent;
+            lock (_chatClientQueueLock) {
+                if (_CR_chatClientQueue.Count < 1) {
+                    // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
+                    Monitor.Wait(_chatClientQueueLock);
+                }
+                // Now it's guaranteed that there's data in the queue.
+                if (_connectionWithClientIsActive) {
+                    messageToBeSent = _CR_chatClientQueue.Dequeue();
+                }
+                else {
+                    return;
+                }
+            }
+            if (messageToBeSent[0] != (byte)ServerFlags.IGNORE) {
+                SendChatMessageToClient(messageToBeSent);
+            }
         }
     }
 

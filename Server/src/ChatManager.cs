@@ -148,10 +148,8 @@ class ChatManager
         lock (_activeChatEmployeesLock) {
             foreach (ChatEmployee employee in _CR_activeChatEmployees) {
                 if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
+                    Debug.Assert(employee._chatEmployeeThread.ManagedThreadId > -1);
                     employee.EnqueueChatEmployeeQueue(messageIncludingFlag);
-                    Debug.WriteLine("DEBUG: " + Environment.CurrentManagedThreadId + " has ADDED message to queue of " + employee._chatEmployeeThread.ManagedThreadId);
-                }
-                else {
                 }
             }
         }
