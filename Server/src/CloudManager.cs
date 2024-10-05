@@ -308,7 +308,7 @@ internal class CloudManager
     private void InformUserHeIsAssigned(UserResources user)
     {
         byte[] buffer = new byte[1];
-        buffer[0] = (byte)ServerFlags.OK;
+        buffer[0] = (byte)CloudFlags.SERVER_OK;
         user.stream.Write(buffer);
     }
     /// <summary>
@@ -320,7 +320,7 @@ internal class CloudManager
         int messageSize = sizeof(byte) + queuePosition.ToString().Length + 1;
         byte[] buffer = new byte[messageSize];
         byte[] queuePositionBytes = Encoding.UTF8.GetBytes(queuePosition.ToString());
-        buffer[0] = (byte)ServerFlags.QUEUE_POSITION;
+        buffer[0] = (byte)CloudFlags.SERVER_QUEUE_POSITION;
         Array.Copy(queuePositionBytes, 0, buffer, 1, queuePositionBytes.Length);
         buffer[messageSize - 1] = Encoding.UTF8.GetBytes("\n")[0];
 

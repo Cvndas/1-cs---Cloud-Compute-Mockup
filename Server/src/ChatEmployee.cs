@@ -113,10 +113,10 @@ class ChatEmployee
 
                     while (_connectionWithClientIsActive) {
                         // ProcessUserChatMessage returns false if it received "quit"
-                        if (ProcessUserChatMessage() == ClientFlags.TO_DASHBOARD) {
+                        if (ProcessUserChatMessage() == CloudFlags.CLIENT_TO_DASHBOARD) {
                             _connectionWithClientIsActive = false;
                             byte[] interruptHelperThread = new byte[1];
-                            interruptHelperThread[0] = (byte)ServerFlags.IGNORE;
+                            interruptHelperThread[0] = (byte)CloudFlags.IGNORE;
                             ChatManager.Instance.FillAllChatClientQueues(interruptHelperThread, -1);
                         }
                     }
@@ -175,7 +175,7 @@ class ChatEmployee
     /// Returns false if received TO_DASHBOARD<br/>
     /// </summary>
     /// <returns></returns>
-    private ClientFlags ProcessUserChatMessage()
+    private CloudFlags ProcessUserChatMessage()
     {
         // Note: This was before I realized that I had to add "\n" to mark the end of each message. This 
         // codebase is a mess of a result, and this here could break if the socket reads more than 1 message
@@ -186,36 +186,36 @@ class ChatEmployee
         }
 
         int bytesReceived = 0;
-        int maxMessageSize = SharedFlags.CHAT_MESSAGE.ToString().Length + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH + 1;
+        int maxMessageSize = CloudFlags.SERVER_CLIENT_CHAT_MESSAGE.ToString().Length + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH + 1;
         int bufferSize = maxMessageSize + 1;
         byte[] buffer = new byte[bufferSize];
         do {
             bytesReceived += _stream.Read(buffer, 0, bufferSize);
         } while (_stream.DataAvailable);
 
-        if ((ClientFlags)buffer[0] == ClientFlags.TO_DASHBOARD) {
-            // Client expects a ClientFlags.TO_DASHBOARD to be returned. Otherwise it will remain stuck in listening.            
+        if ((CloudFlags)buffer[0] == CloudFlags.CLIENT_TO_DASHBOARD) {
+            // Client expects a Flags.TO_DASHBOARD to be returned. Otherwise it will remain stuck in listening.            
             byte[] responseBuffer = new byte[1];
-            responseBuffer[0] = (byte)ClientFlags.TO_DASHBOARD;
+            responseBuffer[0] = (byte)CloudFlags.CLIENT_TO_DASHBOARD;
             lock (_streamLock) {
                 _stream.Write(responseBuffer, 0, 1);
             }
-            return ClientFlags.TO_DASHBOARD;
+            return CloudFlags.CLIENT_TO_DASHBOARD;
         }
 
         // If message is too long, just ignore it. (+1 because of the \n delimiter)
         else if (bytesReceived > maxMessageSize + 1) {
-            return (ClientFlags)0;
+            return (CloudFlags)0;
         }
 
         // If client doesn't send the correct flag for some reason
-        else if ((SharedFlags)buffer[0] != SharedFlags.CHAT_MESSAGE) {
+        else if ((CloudFlags)buffer[0] != CloudFlags.SERVER_CLIENT_CHAT_MESSAGE) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "received an invalid flag.");
         }
         // Else, all correct. Go ahead and fill up all the queues.
         else {
             ChatManager.Instance.FillAllChatClientQueues(buffer, _chatEmployeeThread.ManagedThreadId);
-            return (ClientFlags)0;
+            return (CloudFlags)0;
         }
     }
 
@@ -239,7 +239,7 @@ class ChatEmployee
                     return;
                 }
             }
-            if (messageToBeSent[0] != (byte)ServerFlags.IGNORE) {
+            if (messageToBeSent[0] != (byte)CloudFlags.IGNORE) {
                 SendChatMessageToClient(messageToBeSent);
             }
         }
