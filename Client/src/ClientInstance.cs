@@ -153,7 +153,7 @@ class ClientInstance
         _stream = _tcpClient.GetStream();
 
         bool isAssigned = false;
-        int maxMessageSize = sizeof(ServerFlags) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length;
+        int maxMessageSize = sizeof(ServerFlags) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length + Encoding.UTF8.GetBytes("\n")[0];
 
         // Either you get OK, or you receive QUEUE_POSITION.
         while (!isAssigned) {
@@ -168,9 +168,8 @@ class ClientInstance
             // those messages must be split, and processed in a foreach(). 
 
             string bufferString = Encoding.UTF8.GetString(buffer);
-            // PROBLEM URGENT: These are not unique identifiers. They also exist in the string, probably. 
-            char[] delimiters = { (char)ServerFlags.QUEUE_POSITION, (char)ServerFlags.OK };
-            List<string> allResponsesString = bufferString.Split(delimiters).ToList<string>();
+
+            List<string> allResponsesString = bufferString.Split("\n").ToList<string>();
             Debug.WriteLine("DEBUG TESTING ConnectToServer() MULTIPLE RESPONSE: Length is " + allResponsesString.Count);
 
             foreach (string response in allResponsesString) {
@@ -200,19 +199,21 @@ class ClientInstance
 
     private void SendFlag(ClientFlags clientFlag)
     {
-        byte[] buffer = new byte[1];
+        byte[] buffer = new byte[2];
         buffer[0] = (byte)clientFlag;
+        buffer[1] = Encoding.UTF8.GetBytes("\n")[0]; 
         _stream?.Write(buffer);
     }
 
     private void SendMessageText(ClientFlags clientFlag, string message)
     {
         var messageBytes = Encoding.UTF8.GetBytes(message);
-        byte[] buffer = new Byte[sizeof(ClientFlags) + messageBytes.Length];
+        byte[] buffer = new Byte[sizeof(ClientFlags) + messageBytes.Length + 1];
         byte flagByte = (byte)clientFlag;
         buffer[0] = flagByte;
         Array.Copy(messageBytes, 0, buffer, 1, messageBytes.Length);
-        _stream?.Write(buffer, 0, buffer.Length);
+        _stream?.Write(buffer, 0, buffer.Length - 1);
+        buffer[buffer.Length - 1] = Encoding.UTF8.GetBytes("\n")[0];
         return;
     }
 
@@ -282,7 +283,7 @@ class ClientInstance
 
     private void HandleRegisterResponse()
     {
-        byte[] buffer = new byte[1];
+        byte[] buffer = new byte[2];
         if (_stream == null) {
             throw new Exception("_stream was null in HandleRegisterResponse()");
         }
@@ -329,7 +330,7 @@ class ClientInstance
 
     private void HandleLoginResponse()
     {
-        byte[] buffer = new byte[1];
+        byte[] buffer = new byte[2];
         if (_stream == null) {
             throw new Exception("_stream was null in HandleRegisterResponse()");
         }
@@ -514,11 +515,13 @@ class ClientInstance
     }
     private void SendChatMessage(string message)
     {
-        int bufferSize = sizeof(SharedFlags) + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH;
+        int bufferSize = sizeof(SharedFlags) + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH + 1;
         byte[] buffer = new byte[bufferSize];
         byte[] messageBytes = Encoding.UTF8.GetBytes(message);
         buffer[0] = (byte)SharedFlags.CHAT_MESSAGE;
         Array.Copy(messageBytes, 0, buffer, 1, messageBytes.Count());
+        buffer[bufferSize - 1] = Encoding.UTF8.GetBytes("\n")[0];
+
         if (_stream == null) {
             throw new Exception("_stream was null in SendChatMessage");
         }
@@ -542,7 +545,7 @@ class ClientInstance
             } while (stream.DataAvailable);
             // Parse the data into a list of Messages, separated by strings that match SharedFlags.CHAT_MESSAGE
             string receivedData = Encoding.UTF8.GetString(receiveBuffer, 0, bytesRead);
-            char[] delimiters = { (char)SharedFlags.CHAT_MESSAGE, (char)ClientFlags.TO_DASHBOARD };
+            string delimiters = "\n";
             receivedMessagesWithFlags = receivedData.Split(delimiters).ToList<string>();
             foreach (string chatMessageWithFlag in receivedMessagesWithFlags) {
                 Debug.Assert((Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)SharedFlags.CHAT_MESSAGE) || (Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)ClientFlags.TO_DASHBOARD));

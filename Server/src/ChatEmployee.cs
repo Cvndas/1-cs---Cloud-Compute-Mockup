@@ -177,12 +177,16 @@ class ChatEmployee
     /// <returns></returns>
     private ClientFlags ProcessUserChatMessage()
     {
+        // Note: This was before I realized that I had to add "\n" to mark the end of each message. This 
+        // codebase is a mess of a result, and this here could break if the socket reads more than 1 message
+        // at a time. Not sure how likely that is, but this is probably a security flaw or at least
+        // a bug. 
         if (_stream == null) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "'s stream was null in ProcessUserChatMessage.");
         }
 
         int bytesReceived = 0;
-        int maxMessageSize = SharedFlags.CHAT_MESSAGE.ToString().Length + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH;
+        int maxMessageSize = SharedFlags.CHAT_MESSAGE.ToString().Length + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH + 1;
         int bufferSize = maxMessageSize + 1;
         byte[] buffer = new byte[bufferSize];
         do {
@@ -199,8 +203,8 @@ class ChatEmployee
             return ClientFlags.TO_DASHBOARD;
         }
 
-        // If message is too long, just ignore it.
-        else if (bytesReceived > maxMessageSize) {
+        // If message is too long, just ignore it. (+1 because of the \n delimiter)
+        else if (bytesReceived > maxMessageSize + 1) {
             return (ClientFlags)0;
         }
 

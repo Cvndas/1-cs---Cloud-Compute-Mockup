@@ -317,11 +317,12 @@ internal class CloudManager
     /// </summary>
     private void InformUserOfQueueStatus(UserResources user, int queuePosition)
     {
-        int messageSize = sizeof(byte) + queuePosition.ToString().Length;
+        int messageSize = sizeof(byte) + queuePosition.ToString().Length + 1;
         byte[] buffer = new byte[messageSize];
         byte[] queuePositionBytes = Encoding.UTF8.GetBytes(queuePosition.ToString());
         buffer[0] = (byte)ServerFlags.QUEUE_POSITION;
         Array.Copy(queuePositionBytes, 0, buffer, 1, queuePositionBytes.Length);
+        buffer[messageSize - 1] = Encoding.UTF8.GetBytes("\n")[0];
 
         user.stream.Write(buffer);
     }

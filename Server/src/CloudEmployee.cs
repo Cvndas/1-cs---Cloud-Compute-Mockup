@@ -210,8 +210,9 @@ internal class CloudEmployee
     /// </summary>
     private void SendFlag(ServerFlags serverFlag)
     {
-        byte[] buffer = new byte[1];
+        byte[] buffer = new byte[2];
         buffer[0] = (byte)serverFlag;
+        buffer[1] = Encoding.UTF8.GetBytes("\n")[0];
         if (_stream == null) {
             throw new Exception("stream was null in SendFlag()");
         }
@@ -313,13 +314,8 @@ internal class CloudEmployee
             throw new Exception(_debug_preamble + "userResources was null in ProcessLogin. this should not never happen");
         }
 
-        // Idea: Must be able to detect when the user sends a username or password that is too long.
-        // Situation 1: username is too long | Since username comes first, even if the username takes up all bytes, it'll be fully transmitted,
-        // and detected that it is too long
-        // Situation 2: password is too long | Let's say the user sends a username that is max length(15), then the buffer must
-        // hold at least 16 more bytes to detect a password of >15 bytes. Add to that the flag byte, and the space byte -> 15 + 16 + 1 + 1 = 33,
-        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(ServerFlags) + " ".Length + sizeof(byte);
-        Debug.Assert(bufferSize == 33);
+        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(ServerFlags) + " ".Length + sizeof(byte) + 1;
+        Debug.Assert(bufferSize == 34);
         // Assert that this buffer is large enough to check if the user sent a username+password combo that is too long. +1 should be enough, 
         byte[] buffer = new byte[bufferSize];
         int totalBytesReceived = 0;
