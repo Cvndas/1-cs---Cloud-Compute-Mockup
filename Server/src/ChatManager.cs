@@ -143,13 +143,13 @@ class ChatManager
     /// <summary>
     /// Thread: ChatEmployee's "Listen to client" thread.
     /// </summary>
-    public void FillAllChatClientQueues(byte[] messageIncludingFlag, int ThreadToIgnore)
+    public void FillAllChatClientQueues(string formattedChatMessage, int ThreadToIgnore)
     {
         lock (_activeChatEmployeesLock) {
             foreach (ChatEmployee employee in _CR_activeChatEmployees) {
                 if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
                     Debug.Assert(employee._chatEmployeeThread.ManagedThreadId > -1);
-                    employee.EnqueueChatEmployeeQueue(messageIncludingFlag);
+                    employee.EnqueueChatEmployeeQueue(formattedChatMessage);
                 }
             }
         }

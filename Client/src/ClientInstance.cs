@@ -60,7 +60,7 @@ class ClientInstance
     // Room for improvement, though low priority.
     private int _registrationAttempts;
     private int _loginAttempts;
-    private CloudSenderReceiver? _senderReceiver;
+    private CloudSenderReceiver _senderReceiver;
 
 
     private static ClientInstance? _instance;
@@ -69,6 +69,7 @@ class ClientInstance
         _serverIpEndPoint = new IPEndPoint(ServerAddress.SERVER_IP, ServerAddress.SERVER_PORT);
         _registrationAttempts = 0;
         _loginAttempts = 0;
+        _senderReceiver = new CloudSenderReceiver();
     }
 
     // ----------- CONNECTION INFO --------- //
@@ -115,7 +116,7 @@ class ClientInstance
 
                 case ClientStates.REGISTRATION_INFO_SENT:
                     HandleRegisterResponse();
-                    if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
+                    if (_registrationAttempts > SystemConstants.MAX_REGISTRATION_ATTEMPTS) {
                         WriteLine("Too many registration attempts made.");
                         _clientState = ClientStates.PROGRAM_CLOSED;
                     }
@@ -127,7 +128,7 @@ class ClientInstance
 
                 case ClientStates.LOGIN_INFO_SENT:
                     HandleLoginResponse();
-                    if (_loginAttempts > SystemRestrictions.MAX_LOGIN_ATTEMPTS) {
+                    if (_loginAttempts > SystemConstants.MAX_LOGIN_ATTEMPTS) {
                         WriteLine("Too many login attempts made.");
                         _clientState = ClientStates.PROGRAM_CLOSED;
                     }
@@ -151,10 +152,11 @@ class ClientInstance
     {
         _tcpClient = new TcpClient();
         _tcpClient.Connect(_serverIpEndPoint);
-        _senderReceiver = new CloudSenderReceiver(_tcpClient.GetStream());
+        _senderReceiver!.UpdateStream(_tcpClient.GetStream());
+        ;
 
         bool isAssigned = false;
-        int maxMessageSize = sizeof(CloudFlags) + SystemRestrictions.MAX_USERS_IN_QUEUE.ToString().Length + Encoding.UTF8.GetBytes("\n")[0];
+        int maxMessageSize = sizeof(CloudFlags) + SystemConstants.MAX_USERS_IN_QUEUE.ToString().Length + Encoding.UTF8.GetBytes("\n")[0];
 
         // Either you get OK, or you receive QUEUE_POSITION.
         while (!isAssigned) {
@@ -168,10 +170,10 @@ class ClientInstance
                 }
                 else if (flag == CloudFlags.SERVER_QUEUE_POSITION) {
                     int positionInQueue;
-                    if (!int.TryParse(body, out positionInQueue)){
+                    if (!int.TryParse(body, out positionInQueue)) {
                         throw new Exception("Queue number was invalid.");
                     }
-                    if (positionInQueue > SystemRestrictions.MAX_USERS_IN_QUEUE) {
+                    if (positionInQueue > SystemConstants.MAX_USERS_IN_QUEUE) {
                         WriteLine("Server is overloaded. Try again later.");
                     }
                     else {
@@ -201,17 +203,17 @@ class ClientInstance
             WriteLine();
 
             if (choice == "r") {
-                SendFlag(CloudFlags.CLIENT_REGISTER_REQUEST);
+                _senderReceiver.SendMessage(CloudFlags.CLIENT_REGISTER_REQUEST, "");
                 _clientState = ClientStates.REGISTERING;
                 return;
             }
             else if (choice == "l") {
-                SendFlag(CloudFlags.CLIENT_LOGIN_REQUEST);
+                _senderReceiver.SendMessage(CloudFlags.CLIENT_LOGIN_REQUEST, "");
                 _clientState = ClientStates.LOGGING_IN;
                 return;
             }
             else if (choice == "q") {
-                SendFlag(CloudFlags.CLIENT_QUIT);
+                _senderReceiver.SendMessage(CloudFlags.CLIENT_QUIT, "");
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
             }
@@ -219,49 +221,41 @@ class ClientInstance
                 WriteLine("Invalid choice.");
                 attempts += 1;
             }
-            if (attempts > SystemRestrictions.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
+            if (attempts > SystemConstants.MAX_AUTHENTICATION_CHOICE_MISTAKES) {
                 WriteLine("Learn to read.");
-                SendFlag(CloudFlags.CLIENT_QUIT);
+                _senderReceiver.SendMessage(CloudFlags.CLIENT_QUIT, "");
             }
         }
     }
 
     private void SendRegistrationInfo()
     {
-        // TODO SEND
         WriteLine("Please provide a username and password, separated by a space. NOTE: Passwords are NOT encrypted.");
         WriteLine("Format: [username password]");
         string credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
-        SendMessageText(CloudFlags.CLIENT_SENDING_REGISTRATION_INFO, credentials);
+        _senderReceiver.SendMessage(CloudFlags.CLIENT_SENDING_REGISTRATION_INFO, credentials);
         _clientState = ClientStates.REGISTRATION_INFO_SENT;
-        return 20;
     }
 
     private void SendLoginInfo()
     {
-        // TODO SEND
         WriteLine("Please provide a username and password, separated by a space. Note: Passwords are NOT encrypted.");
         WriteLine("Format: [username password]");
         string credentials = ReadLine() ?? throw new Exception("Failed to read [credentials] in SendLoginInfo");
-        SendMessageText(CloudFlags.CLIENT_SENDING_LOGIN_INFO, credentials);
+        _senderReceiver.SendMessage(CloudFlags.CLIENT_SENDING_LOGIN_INFO, credentials);
         _clientState = ClientStates.LOGIN_INFO_SENT;
 
-        // Mark the username for each attempt, in case it ends up being valid.
+        // Mark the username on each attempt. Last attempt is a valid attempt, which will set a valid username.
         _username = credentials.Split(" ")[0] ?? "";
-
-        return;
     }
 
     private void HandleRegisterResponse()
     {
-        byte[] buffer = new byte[2];
-        if (_stream == null) {
-            throw new Exception("_stream was null in HandleRegisterResponse()");
+        List<(CloudFlags flag, string body)> receivedList = _senderReceiver.ReceiveMessages();
+        if (receivedList.Count > 1 || receivedList[0].body != "") {
+            throw new Exception("Received invalid response in HandleRegisterResponse()");
         }
-        int bytesRead = _stream.Read(buffer);
-        Debug.Assert(bytesRead > 0);
-        CloudFlags serverFlag = (CloudFlags)buffer[0];
-
+        CloudFlags serverFlag = receivedList[0].flag;
         if (serverFlag == CloudFlags.SERVER_OK) {
             WriteLine("Account created! Please proceed to login.");
             _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
@@ -279,11 +273,11 @@ class ClientInstance
                 _clientState = ClientStates.PROGRAM_CLOSED;
                 return;
             case CloudFlags.SERVER_PASSWORD_TOO_LONG:
-                WriteLine("Password was too long. Max length: " + SystemRestrictions.MAX_PASSWORD_LENGTH + " characters.");
+                WriteLine("Password was too long. Max length: " + SystemConstants.MAX_PASSWORD_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case CloudFlags.SERVER_USERNAME_TOO_LONG:
-                WriteLine("Username was too long. Max length: " + SystemRestrictions.MAX_USERNAME_LENGTH + " characters.");
+                WriteLine("Username was too long. Max length: " + SystemConstants.MAX_USERNAME_LENGTH + " characters.");
                 _clientState = ClientStates.REGISTERING;
                 return;
             case CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE:
@@ -301,12 +295,11 @@ class ClientInstance
 
     private void HandleLoginResponse()
     {
-        byte[] buffer = new byte[2];
-        if (_stream == null) {
-            throw new Exception("_stream was null in HandleRegisterResponse()");
+        List<(CloudFlags flag, string body)> receivedList = _senderReceiver.ReceiveMessages();
+        if (receivedList.Count > 1 || receivedList[0].body != "") {
+            throw new Exception("Received invalid response in HandleRegisterResponse()");
         }
-        _stream.Read(buffer);
-        CloudFlags serverFlag = (CloudFlags)buffer[0];
+        CloudFlags serverFlag = receivedList[0].flag;
 
         if (serverFlag == CloudFlags.SERVER_OK) {
             SetupUserSession();
@@ -321,7 +314,7 @@ class ClientInstance
                 WriteLine("You are already logged in on another client.");
                 return;
             case CloudFlags.SERVER_PASSWORD_INCORRECT:
-                WriteLine($"Incorrect password. You have {SystemRestrictions.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
+                WriteLine($"Incorrect password. You have {SystemConstants.MAX_LOGIN_ATTEMPTS - _loginAttempts + 1} more chances to log in.");
                 _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
                 return;
             case CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE:
@@ -392,7 +385,7 @@ class ClientInstance
                 break;
             }
             else if (userChoice == "chat") {
-                SendFlag(CloudFlags.CLIENT_TO_CHAT);
+                _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_CHAT, "");
                 _clientState = ClientStates.IN_CHAT;
                 break;
             }
@@ -438,11 +431,6 @@ class ClientInstance
     /// </summary>
     private void RunChatInterface()
     {
-        // string hwText = "Hello Chat!";
-        // byte[] buffer = Encoding.UTF8.GetBytes(hwText);
-        // _stream!.Write(buffer);
-        // _clientState = ClientStates.PROGRAM_CLOSED;
-
         // Idea: Main thread receives user input and sends it to the server
         //       helper thread receives messages from the server and displays it to the user.
         if (_stream == null) {
@@ -451,28 +439,31 @@ class ClientInstance
 
         Console.Write("Welcome to the Cloud Chat, " + _username + ".");
         Console.WriteLine(" (type \"quit\" to return to Dashboard.)");
-        Thread receiveThread = new Thread(() => ReceiveMessagesJob(_stream));
+        Thread receiveThread = new Thread(() => ReceiveMessagesJob());
         try {
 
             receiveThread.Start();
             string? userMessage = "";
             while (true) {
-                Console.Write("Send message: ");
-                userMessage = Console.ReadLine();
+                Write("Send message: ");
+                userMessage = ReadLine();
                 if (userMessage == null) {
                     throw new Exception("User's input was null in RunChatInterface");
                 }
                 if (userMessage == "quit") {
-                    SendFlag(CloudFlags.CLIENT_TO_DASHBOARD);
+                    _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
+                    // TODO : Forcefully interrupt the helper thread. Don't do this via sending message to the server, as thats too much coupling. 
+                    Debug.Assert(false);
+                    // TODO : Make the user skip registration. For later, though. 
                     _clientState = ClientStates.LOGGED_IN;
                     break;
                 }
-                if (userMessage.Length > SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH) {
-                    // TODO 
-                    Console.WriteLine("Chat message too long. Max length: " + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH);
+                if (userMessage.Length > SystemConstants.MAX_CHAT_MESSAGE_LEN) {
+                    WriteLine("Chat message too long. Max length: " + SystemConstants.MAX_CHAT_MESSAGE_LEN);
                 }
                 else {
-                    SendChatMessage(userMessage);
+                    string formattedChatMessage = FormatChatMessage(userMessage);
+                    _senderReceiver.SendMessage(CloudFlags.CLIENT_CHAT_MESSAGE, userMessage);
                 }
             }
             receiveThread.Join();
@@ -482,39 +473,28 @@ class ClientInstance
 
             WriteLine("Caught Thread Interrupt.");
         }
-        Console.WriteLine("Returning to dashboard.");
+        WriteLine("Returning to dashboard.");
+    }
+
+    private string FormatChatMessage(string userMessage)
+    {
+        return _username + SystemConstants.CHAT_MESSAGE_PREAMBLE;
     }
 
     /// <summary>
     /// Thread: Chat Client Helper thread. <br/>Launched in RunChatInterface<br/>Joined in RunChatInterface.
     /// </summary>
-    private void ReceiveMessagesJob(NetworkStream stream)
+    private void ReceiveMessagesJob()
     {
-        bool _userHasExitedChat = false;
-        int bufferSize = 1024;
-        byte[] receiveBuffer = new byte[bufferSize];
-        int bytesRead = 0;
-        List<string> receivedMessagesWithFlags = new List<string>();
-
-        while (!_userHasExitedChat) {
-            do {
-                bytesRead += stream.Read(receiveBuffer, 0, 1024);
-            } while (stream.DataAvailable);
+        while (true) {
+            List<(CloudFlags flag, string body)> receivedChats = _senderReceiver.ReceiveMessages();
             // Parse the data into a list of Messages, separated by strings that match Flags.CHAT_MESSAGE
-            string receivedData = Encoding.UTF8.GetString(receiveBuffer, 0, bytesRead);
-            string delimiters = "\n";
-            receivedMessagesWithFlags = receivedData.Split(delimiters).ToList<string>();
-            foreach (string chatMessageWithFlag in receivedMessagesWithFlags) {
-                Debug.Assert((Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)CloudFlags.SERVER_CLIENT_CHAT_MESSAGE) || (Encoding.UTF8.GetBytes(chatMessageWithFlag)[0] == (byte)CloudFlags.CLIENT_TO_DASHBOARD));
-                if (chatMessageWithFlag[0] == (byte)CloudFlags.CLIENT_TO_DASHBOARD) {
-                    _userHasExitedChat = true;
-                    break;
+            foreach (var chat in receivedChats) {
+                if (chat.flag != CloudFlags.SERVER_CHAT_MESSAGE) {
+                    throw new Exception("ReceiveMessagesJob: Received incorrect flag from server.");
                 }
-                string chatMessageWithoutFlag = chatMessageWithFlag.Substring(1);
-                Console.WriteLine(chatMessageWithoutFlag);
+                WriteLine(chat.body);
             }
-            receivedMessagesWithFlags.Clear();
         }
-        return;
     }
 }

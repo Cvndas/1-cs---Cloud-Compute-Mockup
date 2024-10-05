@@ -27,6 +27,7 @@ internal class CloudManager
     /// </summary>
     public void AddToFreeQueue(CloudEmployee cloudEmployee)
     {
+        // TODO : Shouldn't this also be called by the employee somewhere? 
         lock (_freeEmployeeQueueLock) {
             _CR_freeEmployeeQueue.Enqueue(cloudEmployee);
             // Unnecessary: At this stage, the CloudManager is not yet running.
@@ -124,7 +125,7 @@ internal class CloudManager
     public void AddToUserQueue(UserResources userResources)
     {
         lock (_pendingUserQueueLock) {
-            if (!(_CR_pendingUserQueue.Count > SystemRestrictions.MAX_USERS_IN_QUEUE)) {
+            if (!(_CR_pendingUserQueue.Count > SystemConstants.MAX_USERS_IN_QUEUE)) {
                 _CR_pendingUserQueue.Enqueue(userResources);
                 Monitor.PulseAll(_pendingUserQueueLock);
             }
@@ -293,6 +294,7 @@ internal class CloudManager
             }
         }
     }
+
     /// <summary>
     /// Thread: CloudManager
     /// </summary>
@@ -305,26 +307,18 @@ internal class CloudManager
     /// <summary>
     /// Thread: CloudManager - Called when an active user is popped from the queue.
     /// </summary>
-    private void InformUserHeIsAssigned(UserResources user)
+    private static void InformUserHeIsAssigned(UserResources user)
     {
-        byte[] buffer = new byte[1];
-        buffer[0] = (byte)CloudFlags.SERVER_OK;
-        user.stream.Write(buffer);
+        user.senderReceiver.SendMessage(CloudFlags.SERVER_OK, "");
     }
+
     /// <summary>
     /// Thread: CloudManager - Sent to everyone in the queue after assigning the head <br/>
-    /// Thread: Main/Listener - Sent to newly added user after they've been added to the queue.
+    /// Thread: Main/Listener - Sent to newly added user after they've been added to the queue.<br/>
     /// </summary>
-    private void InformUserOfQueueStatus(UserResources user, int queuePosition)
+    private static void InformUserOfQueueStatus(UserResources user, int queuePosition)
     {
-        int messageSize = sizeof(byte) + queuePosition.ToString().Length + 1;
-        byte[] buffer = new byte[messageSize];
-        byte[] queuePositionBytes = Encoding.UTF8.GetBytes(queuePosition.ToString());
-        buffer[0] = (byte)CloudFlags.SERVER_QUEUE_POSITION;
-        Array.Copy(queuePositionBytes, 0, buffer, 1, queuePositionBytes.Length);
-        buffer[messageSize - 1] = Encoding.UTF8.GetBytes("\n")[0];
-
-        user.stream.Write(buffer);
+        user.senderReceiver.SendMessage(CloudFlags.SERVER_QUEUE_POSITION, queuePosition.ToString());
     }
     /// <summary>
     /// Thread: Cloud Manager, after dequeuing to grab the first-in-line user <br/>

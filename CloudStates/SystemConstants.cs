@@ -1,4 +1,6 @@
-public class SystemRestrictions
+using System.Linq.Expressions;
+
+public class SystemConstants
 {
     public const int MAX_USERNAME_LENGTH = 15;  // bytes or string.Length
     public const int MAX_PASSWORD_LENGTH = 15; // bytes or string.Length
@@ -11,4 +13,6 @@ public class SystemRestrictions
     public const int MAX_FILES_IN_CLOUD = 5;
     public const int MAX_USERS_IN_QUEUE = 100;
     public const int MAX_BODY_BYTE_LEN = 50;
+    public static readonly string CHAT_MESSAGE_PREAMBLE = ": ";
+    public static readonly int MAX_CHAT_MESSAGE_LEN = MAX_BODY_BYTE_LEN - MAX_USERNAME_LENGTH - CHAT_MESSAGE_PREAMBLE.Length;
 }

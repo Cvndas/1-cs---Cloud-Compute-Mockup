@@ -1,6 +1,7 @@
 // The component that listens for incoming TCP connections. Runs on the Main Thread.
 using System.Net;
 using System.Net.Sockets;
+using CloudStates;
 
 namespace Server.src;
 class CloudListener
@@ -31,7 +32,10 @@ class CloudListener
             while (_serverIsRunning) {
                 TcpClient incomingClient = tcpListener.AcceptTcpClient();
                 NetworkStream stream = incomingClient.GetStream();
-                UserResources newUser = new UserResources(incomingClient, stream);
+                CloudSenderReceiver senderReceiver = new CloudSenderReceiver();
+                senderReceiver.UpdateStream(stream);
+
+                UserResources newUser = new UserResources(incomingClient, stream, senderReceiver);
                 CloudManager.Instance.AddToUserQueue(newUser);
             }
         }

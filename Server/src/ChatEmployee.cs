@@ -20,8 +20,8 @@ class ChatEmployee
     // ------------ Concurrency ---------- //
     // Both the main thread and the helper thread of the chat employee may send over the socket
     // at once.
-    private NetworkStream? _stream;
-    private readonly object _streamLock;
+    private CloudSenderReceiver? _senderReceiver;
+    private readonly object _senderReceiverLock;
     // ----------------------------------- // 
 
     public Thread _chatEmployeeThread;
@@ -33,7 +33,7 @@ class ChatEmployee
     /// Threads: Accessed by self and other chatClients, for chat message exchange.<br/>
     /// Contains messages that already have the CHAT_MESSAGE flag set. 
     /// </summary>
-    private Queue<byte[]> _CR_chatClientQueue;
+    private Queue<string> _CR_chatClientQueue;
     private object _chatClientQueueLock;
     // ---------------------------------- // 
 
@@ -51,11 +51,11 @@ class ChatEmployee
         _threadIsReadyLock = new object();
 
         _chatClientQueueLock = new object();
-        _CR_chatClientQueue = new Queue<byte[]>();
+        _CR_chatClientQueue = new Queue<string>();
 
         _connectionWithClientIsActive = false;
 
-        _streamLock = new object();
+        _senderReceiverLock = new object();
 
         _chatEmployeeThread = new(ChatEmployeeJob);
         lock (_threadIsReadyLock) {
@@ -78,7 +78,7 @@ class ChatEmployee
 
         lock (_isWorkingLock) {
             _userResources = userResources;
-            _stream = _userResources.stream;
+            _senderReceiver = _userResources.senderReceiver;
             // Notify that the userResources are assigned, and the thread can start working.
             Monitor.Pulse(_isWorkingLock); // Wake up ChatEmployeeJob()
         }
@@ -114,14 +114,13 @@ class ChatEmployee
                     while (_connectionWithClientIsActive) {
                         // ProcessUserChatMessage returns false if it received "quit"
                         if (ProcessUserChatMessage() == CloudFlags.CLIENT_TO_DASHBOARD) {
-                            _connectionWithClientIsActive = false;
-                            byte[] interruptHelperThread = new byte[1];
-                            interruptHelperThread[0] = (byte)CloudFlags.IGNORE;
-                            ChatManager.Instance.FillAllChatClientQueues(interruptHelperThread, -1);
+                            break;
+                            // TODO CHAT : interrupt helper thread when the client goes back to the dashboard.
+                            Debug.Assert(false);
                         }
                     }
 
-                    // Thread should be closed by ProcessUserChatMessages() when it processes a TO_DASHBOARD flag. 
+                    // TODO : like I said, interrupt the helper so it doesn't get stuck here.
                     sendToUserThread.Join();
                 }
                 catch (Exception e) {
@@ -146,26 +145,11 @@ class ChatEmployee
     /// Thread: Another chat employee. Pulses that there is a message to be sent to the client. <br/>
     /// If the chat employee was waiting for a message, he will be woken up. 
     /// </summary>
-    public void EnqueueChatEmployeeQueue(byte[] message)
+    public void EnqueueChatEmployeeQueue(string formattedChatMessage)
     {
         lock (_chatClientQueueLock) {
-            _CR_chatClientQueue.Enqueue(message);
+            _CR_chatClientQueue.Enqueue(formattedChatMessage);
             Monitor.Pulse(_chatClientQueueLock);
-        }
-    }
-
-    /// <summary>
-    /// Thread: ChatEmployee's sendToUserThread, which is his helper thread <br/>
-    /// Note: This function adds its own CHAT_MESSAGE flag, so this doesn't have to be done by the 
-    /// main thread.
-    /// </summary>
-    private void SendChatMessageToClient(byte[] messageWithFlag)
-    {
-        if (_stream == null) {
-            throw new Exception("_stream was null in chat employee " + _chatEmployeeThread.ManagedThreadId + "'s sendChatMessageToClient(), which runs on its own helper thread.");
-        }
-        lock (_streamLock) {
-            _stream.Write(messageWithFlag);
         }
     }
 
@@ -177,47 +161,43 @@ class ChatEmployee
     /// <returns></returns>
     private CloudFlags ProcessUserChatMessage()
     {
-        // Note: This was before I realized that I had to add "\n" to mark the end of each message. This 
-        // codebase is a mess of a result, and this here could break if the socket reads more than 1 message
-        // at a time. Not sure how likely that is, but this is probably a security flaw or at least
-        // a bug. 
-        if (_stream == null) {
+        if (_senderReceiver == null) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "'s stream was null in ProcessUserChatMessage.");
         }
 
-        int bytesReceived = 0;
-        int maxMessageSize = CloudFlags.SERVER_CLIENT_CHAT_MESSAGE.ToString().Length + SystemRestrictions.MAX_CHAT_MESSAGE_LENGTH + 1;
-        int bufferSize = maxMessageSize + 1;
-        byte[] buffer = new byte[bufferSize];
-        do {
-            bytesReceived += _stream.Read(buffer, 0, bufferSize);
-        } while (_stream.DataAvailable);
+        List<(CloudFlags flagFromClient, string chatMessage)> chatMessages;
+        lock (_senderReceiverLock) {
+            chatMessages = _senderReceiver.ReceiveMessages();
+        }
+        if (chatMessages.Count > 1) {
+            throw new Exception("Received more than 1 chat message from the client.");
+        }
 
-        if ((CloudFlags)buffer[0] == CloudFlags.CLIENT_TO_DASHBOARD) {
-            // Client expects a Flags.TO_DASHBOARD to be returned. Otherwise it will remain stuck in listening.            
-            byte[] responseBuffer = new byte[1];
-            responseBuffer[0] = (byte)CloudFlags.CLIENT_TO_DASHBOARD;
-            lock (_streamLock) {
-                _stream.Write(responseBuffer, 0, 1);
-            }
+        (CloudFlags flag, string chatMessage) = chatMessages[0];
+
+        if (flag == CloudFlags.CLIENT_TO_DASHBOARD) {
+            // TODO : Interrupt helper thread, etc. 
+            Debug.Assert(false);
             return CloudFlags.CLIENT_TO_DASHBOARD;
         }
 
         // If message is too long, just ignore it. (+1 because of the \n delimiter)
-        else if (bytesReceived > maxMessageSize + 1) {
+        else if (chatMessage.Length > SystemConstants.MAX_CHAT_MESSAGE_LEN) {
+            WriteLine("Received a message that was too long: " + chatMessage.Length + " characters.");
             return (CloudFlags)0;
         }
 
         // If client doesn't send the correct flag for some reason
-        else if ((CloudFlags)buffer[0] != CloudFlags.SERVER_CLIENT_CHAT_MESSAGE) {
+        else if (flag != CloudFlags.CLIENT_CHAT_MESSAGE) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "received an invalid flag.");
         }
         // Else, all correct. Go ahead and fill up all the queues.
         else {
-            ChatManager.Instance.FillAllChatClientQueues(buffer, _chatEmployeeThread.ManagedThreadId);
+            ChatManager.Instance.FillAllChatClientQueues(chatMessage, _chatEmployeeThread.ManagedThreadId);
             return (CloudFlags)0;
         }
     }
+
 
     /// <summary>
     /// Thread: ChatEmployee's sendToUserThread, which is his helper thread
@@ -225,22 +205,18 @@ class ChatEmployee
     public void sendToUserJob()
     {
         while (true) {
-            byte[] messageToBeSent;
+            string chatMessageToBeSent;
             lock (_chatClientQueueLock) {
                 if (_CR_chatClientQueue.Count < 1) {
                     // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
                     Monitor.Wait(_chatClientQueueLock);
                 }
                 // Now it's guaranteed that there's data in the queue.
-                if (_connectionWithClientIsActive) {
-                    messageToBeSent = _CR_chatClientQueue.Dequeue();
-                }
-                else {
-                    return;
-                }
+                chatMessageToBeSent = _CR_chatClientQueue.Dequeue();
+                // TODO : Interrupt the thread properly, same method as ClientInstance.
             }
-            if (messageToBeSent[0] != (byte)CloudFlags.IGNORE) {
-                SendChatMessageToClient(messageToBeSent);
+            lock (_senderReceiverLock){
+                _senderReceiver!.SendMessage(CloudFlags.SERVER_CHAT_MESSAGE, chatMessageToBeSent);
             }
         }
     }

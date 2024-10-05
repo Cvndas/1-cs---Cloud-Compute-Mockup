@@ -28,7 +28,7 @@ internal class CloudEmployee
 
     private ServerStates _employeeState;
     private UserResources? _userResources;
-    private NetworkStream? _stream;
+    private CloudSenderReceiver? _senderReceiver;
     private string? _debug_preamble;
     private int _registrationAttempts = 0; // Reset to 0 in AssignClient
     private int _loginAttempts = 0; // Reset to 0 in AssignClient
@@ -54,9 +54,8 @@ internal class CloudEmployee
         Debug.Assert(Environment.CurrentManagedThreadId == ThreadRegistry.CloudManagerThreadId);
         Debug.Assert(userResources != null);
         _userResources = userResources;
-        _stream = _userResources.stream;
+        _senderReceiver = userResources.senderReceiver;
         _transferedUserToChat = false;
-        Debug.Assert(_stream != null);
 
         _registrationAttempts = 0;
         _loginAttempts = 0;
@@ -150,8 +149,8 @@ internal class CloudEmployee
                     break;
 
                 case ServerStates.PROCESS_REGISTRATION:
-                    if (_registrationAttempts > SystemRestrictions.MAX_REGISTRATION_ATTEMPTS) {
-                        SendFlag(CloudFlags.SERVER_TOO_MANY_ATTEMPTS);
+                    if (_registrationAttempts > SystemConstants.MAX_REGISTRATION_ATTEMPTS) {
+                        _senderReceiver!.SendMessage(CloudFlags.SERVER_TOO_MANY_ATTEMPTS, "");
                         _employeeState = ServerStates.NO_CONNECTION;
                         break;
                     }
@@ -175,7 +174,11 @@ internal class CloudEmployee
     // Thread: Employee-x ==  self
     private void ProcessAuthenticationChoice()
     {
-        CloudFlags flagByte = ReceiveFlag();
+        List<(CloudFlags flags, string body)> serverResponse = _senderReceiver!.ReceiveMessages();
+        if (serverResponse.Count > 1 || serverResponse[0].body != ""){
+            throw new Exception("Received incorrect responses in ProcessAuthenticationChoice.");
+        }
+        CloudFlags flagByte = serverResponse[0].flags;
         if (flagByte == CloudFlags.CLIENT_REGISTER_REQUEST) {
             _employeeState = ServerStates.PROCESS_REGISTRATION;
             return;
@@ -193,32 +196,6 @@ internal class CloudEmployee
         }
     }
 
-    /// <summary>
-    /// Thread: CloudEmployee-x == self
-    /// </summary>
-    private CloudFlags ReceiveFlag()
-    {
-        byte[] buffer = new byte[1];
-        if (_userResources?.stream == null) {
-            throw new Exception("Stream as null.");
-        }
-        _userResources.stream.Read(buffer);
-        return (CloudFlags)buffer[0];
-    }
-    /// <summary>
-    /// Thread: Employee-x == self
-    /// </summary>
-    private void SendFlag(CloudFlags serverFlag)
-    {
-        byte[] buffer = new byte[2];
-        buffer[0] = (byte)serverFlag;
-        buffer[1] = Encoding.UTF8.GetBytes("\n")[0];
-        if (_stream == null) {
-            throw new Exception("stream was null in SendFlag()");
-        }
-        _stream.Write(buffer);
-        return;
-    }
 
     /// <summary>
     /// Thread: Employee-x == self
@@ -227,41 +204,28 @@ internal class CloudEmployee
     {
         Debug.Assert(_employeeState == ServerStates.PROCESS_REGISTRATION);
 
-        // Explained in ProcessLogin. Idea: least number of bytes needed to detect password that is too long.
-        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(CloudFlags) + " ".Length + sizeof(byte);
-        Debug.Assert(bufferSize == 33);
-
-        byte[] buffer = new byte[bufferSize];
-        int totalBytesRead = 0;
-
-        if (_userResources == null) {
-            throw new Exception("_userResources was null");
-        }
-        do {
-            // This is a blocking call
-            int iterationBytesRead = _userResources.stream.Read(buffer, 0, bufferSize);
-            totalBytesRead += iterationBytesRead;
-        } while (_userResources.stream.DataAvailable);
-
-
         // Build the string out of the Message without the flag byte.
-        string receivedString = Encoding.UTF8.GetString(buffer, 1, totalBytesRead - sizeof(CloudFlags));
-        Debug.WriteLine(_debug_preamble + $"Received authentication string: {receivedString}");
+        List<(CloudFlags flags, string body)> serverResponses= _senderReceiver!.ReceiveMessages();
+        if (serverResponses.Count > 1){
+            throw new Exception("Received too many responses in ProcessRegistration.");
+        }
+        (CloudFlags flags, string body) response = serverResponses[0];
+        Debug.WriteLine(_debug_preamble + $"Received authentication string: {response.body}");
 
 
         //  ------------------Handle the possible responses for this state. ----------------------- // 
         // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
-        string[] usernameAndPassword = receivedString.Split(" ");
+        string[] usernameAndPassword = response.body.Split(" ");
         // username: usernameAndPassword[0], password: usernameAndPassword[1], both may be null.
-        if ((CloudFlags)buffer[0] != CloudFlags.CLIENT_SENDING_REGISTRATION_INFO) {
-            SendFlag(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR);
-            Debug.WriteLine(_debug_preamble + $"Received flag: {(CloudFlags)buffer[0]}");
+        if (response.flags != CloudFlags.CLIENT_SENDING_REGISTRATION_INFO) {
+            _senderReceiver.SendMessage(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR, "");
+            Debug.WriteLine(_debug_preamble + $"Received flag: {response.flags}");
             throw new Exception("Incorrect flag received in ProcessRegistration()");
         }
         // Check if there are either 2 spaces in different places or two consecutive spaces.
-        if (usernameAndPassword.Length != 2 || receivedString.IndexOf(" ") != receivedString.LastIndexOf(" ")) {
+        if (usernameAndPassword.Length != 2 || response.body.IndexOf(" ") != response.body.LastIndexOf(" ")) {
             Debug.WriteLine(_debug_preamble + "Credentials were wrong.");
-            SendFlag(CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE, "");
             _registrationAttempts += 1;
             return;
         }
@@ -270,20 +234,19 @@ internal class CloudEmployee
         string password = usernameAndPassword[1];
         Debug.Assert(username != null && password != null);
 
-        if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH) {
-            SendFlag(CloudFlags.SERVER_USERNAME_TOO_LONG);
+        if (username.Length > SystemConstants.MAX_USERNAME_LENGTH) {
+            _senderReceiver.SendMessage(CloudFlags.SERVER_USERNAME_TOO_LONG, "");
             _registrationAttempts += 1;
             return;
         }
-        else if (password.Length > SystemRestrictions.MAX_PASSWORD_LENGTH) {
-            SendFlag(CloudFlags.SERVER_PASSWORD_TOO_LONG);
+        else if (password.Length > SystemConstants.MAX_PASSWORD_LENGTH) {
+            _senderReceiver.SendMessage(CloudFlags.SERVER_PASSWORD_TOO_LONG, "");
             _registrationAttempts += 1;
             return;
         }
 
         else if (CloudManager.Instance.UserIsRegistered(username)) {
-            // TODO login : handle case of username already being taken.
-            SendFlag(CloudFlags.SERVER_USERNAME_TAKEN);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_USERNAME_TAKEN, "");
             _registrationAttempts += 1;
             return;
         }
@@ -298,11 +261,11 @@ internal class CloudEmployee
             + "Exception info: " + e.Message);
             _registrationAttempts += 1;
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
-            SendFlag(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR, "");
             return;
         }
-        SendFlag(CloudFlags.SERVER_OK);
-        _userResources.username = username;
+        _senderReceiver.SendMessage(CloudFlags.SERVER_OK, "");
+        _userResources!.username = username;
         _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
         return;
     }
@@ -310,38 +273,27 @@ internal class CloudEmployee
     private void ProcessLogin()
     {
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
-        if (_userResources == null) {
-            throw new Exception(_debug_preamble + "userResources was null in ProcessLogin. this should not never happen");
+
+        List<(CloudFlags flag, string body)> serverResponses= _senderReceiver!.ReceiveMessages();
+        if (serverResponses.Count > 1){
+            throw new Exception("Received too many responses in ProcessLogin.");
         }
+        CloudFlags flag = serverResponses[0].flag;
+        string body = serverResponses[0].body;
 
-        int bufferSize = SystemRestrictions.MAX_PASSWORD_LENGTH + SystemRestrictions.MAX_USERNAME_LENGTH + sizeof(CloudFlags) + " ".Length + sizeof(byte) + 1;
-        Debug.Assert(bufferSize == 34);
-        // Assert that this buffer is large enough to check if the user sent a username+password combo that is too long. +1 should be enough, 
-        byte[] buffer = new byte[bufferSize];
-        int totalBytesReceived = 0;
-        if (_stream == null) {
-            throw new Exception(_debug_preamble + "_stream was null in ProcessLogin");
-        }
-
-        do {
-            totalBytesReceived += _stream.Read(buffer, 0, bufferSize);
-        } while (_stream.DataAvailable);
-
-        CloudFlags clientFlag = (CloudFlags)buffer[0];
-
-        if (clientFlag != CloudFlags.CLIENT_SENDING_LOGIN_INFO) {
-            SendFlag(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR);
+        if (flag != CloudFlags.CLIENT_SENDING_LOGIN_INFO) {
+            _senderReceiver.SendMessage(CloudFlags.SERVER_UNEXPECTED_SERVER_ERROR, "");
             _loginAttempts += 1;
             _employeeState = ServerStates.NO_CONNECTION;
             throw new Exception(_debug_preamble + "received incorrect flag from client in ProcessLogin()");
         }
         // Get the ammount of read bytes, minus the flag byte, starting from the byte after the flag byte.
-        string usernamePassword = Encoding.UTF8.GetString(buffer, 1, totalBytesReceived - 1);
+        string usernamePassword = body;
         string[] usernamePasswordArray = usernamePassword.Split(" ");
 
         // Handling all possible cases.
         if (usernamePasswordArray.Length != 2 || usernamePassword.IndexOf(" ") != usernamePassword.LastIndexOf(" ")) {
-            SendFlag(CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_INCORRECT_CREDENTIALS_STRUCTURE, "");
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
             return;
@@ -350,28 +302,31 @@ internal class CloudEmployee
         string password = usernamePasswordArray[1];
 
         if (CloudManager.Instance.UserIsLoggedIn(username)) {
-            SendFlag(CloudFlags.SERVER_ALREADY_LOGGED_IN);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_ALREADY_LOGGED_IN, "");
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
             return;
         }
 
         // If username is too long, it means it doesn't exist. 
-        if (username.Length > SystemRestrictions.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
-            SendFlag(CloudFlags.SERVER_USERNAME_DOESNT_EXIST);
+        if (username.Length > SystemConstants.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {
+            _senderReceiver.SendMessage(CloudFlags.SERVER_USERNAME_DOESNT_EXIST, "");
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
             return;
         }
 
         if (!CloudManager.Instance.IsPasswordCorrect(username, password)) {
-            SendFlag(CloudFlags.SERVER_PASSWORD_INCORRECT);
+            _senderReceiver.SendMessage(CloudFlags.SERVER_PASSWORD_INCORRECT, "");
             _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
             _loginAttempts += 1;
             return;
         }
 
-        SendFlag(CloudFlags.SERVER_OK);
+        _senderReceiver.SendMessage(CloudFlags.SERVER_OK, "");
+        if (_userResources == null){
+            throw new Exception("_userResources was null in ProcessLogin()");
+        }
         CloudManager.Instance.AddToLoggedInList(_userResources);
         _employeeState = ServerStates.IN_DASHBOARD;
         return;
@@ -380,19 +335,12 @@ internal class CloudEmployee
     // Thread: CloudEmployee-x
     private void ProcessDashboard()
     {
-        // The longest possible request is UPLOAD_REQUEST " " FileName " " FileSize
-        // Added 10 bytes just to be safe.
-        int maximumRequestLength = sizeof(CloudFlags) + " ".Length + SystemRestrictions.MAX_FILENAME_LENGTH + " ".Length + sizeof(int) + 10;
-        int bufferSize = maximumRequestLength + 1;
-        byte[] buffer = new byte[bufferSize];
-        int receivedBytes = 0;
-
-        do {
-            receivedBytes += _stream!.Read(buffer, 0, bufferSize);
-        } while (_stream.DataAvailable);
-
-        CloudFlags receivedFlag = (CloudFlags)buffer[0];
-
+        var response = _senderReceiver!.ReceiveMessages();
+        if (response.Count > 1){
+            throw new Exception("Received too many server responses in ProcessDashboard().");
+        }
+        var receivedFlag = response[0].flagtype;
+        var body = response[0].body;
         // Process flag-only cases first
         if (receivedFlag == CloudFlags.CLIENT_TO_CHAT) {
             TransferClientToChatManager();
@@ -400,8 +348,7 @@ internal class CloudEmployee
         }
 
         Console.WriteLine("ProcessDashboard: Only TO_CHAT is (partially) implemented.");
-        string receivedString = Encoding.UTF8.GetString(buffer);
-        string[] receivedStringComponents = receivedString.Split(" ");
+        string[] receivedStringComponents = body.Split(" ");
 
         // if (true) {
 
