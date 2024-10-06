@@ -18,6 +18,12 @@ public enum CloudFlags : byte
     CLIENT_UPLOAD_REQUEST,
     CLIENT_DOWNLOAD_REQUEST,
     CLIENT_TO_CHAT,
+
+    /// <summary>
+    /// Overlaps with '\n'. Don't use it. 
+    /// </summary>
+    IGNORE,
+
     CLIENT_CHAT_MESSAGE,
     SERVER_OK,
     SERVER_USERNAME_TAKEN,

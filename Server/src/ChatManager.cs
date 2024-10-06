@@ -141,15 +141,16 @@ class ChatManager
         }
     }
     /// <summary>
-    /// Thread: ChatEmployee's "Listen to client" thread.
+    /// Thread: ChatEmployee's "Listen to client" thread. <br/>
+    /// Note: Only the message body must be included, ie. "Username: Hello bro.", no terminator, no Flag.
     /// </summary>
-    public void FillAllChatClientQueues(string formattedChatMessage, int ThreadToIgnore)
+    public void FillAllChatClientQueues(string messageBody, int ThreadToIgnore)
     {
         lock (_activeChatEmployeesLock) {
             foreach (ChatEmployee employee in _CR_activeChatEmployees) {
                 if (employee._chatEmployeeThread.ManagedThreadId != ThreadToIgnore) {
                     Debug.Assert(employee._chatEmployeeThread.ManagedThreadId > -1);
-                    employee.EnqueueChatEmployeeQueue(formattedChatMessage);
+                    employee.EnqueueChatEmployeeQueue(messageBody);
                 }
             }
         }

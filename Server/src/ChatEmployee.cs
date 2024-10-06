@@ -98,6 +98,7 @@ class ChatEmployee
 
             while (true) { // Thread loop: Each iteration represents the lifetime of a connection.
                 Monitor.Wait(_isWorkingLock); // Wait to be woken up by ConnectWithClient()
+                Thread sendToUserThread = new Thread(sendToUserJob);
                 try {
                     _connectionWithClientIsActive = true;
                     lock (_chatClientQueueLock) {
@@ -107,27 +108,34 @@ class ChatEmployee
 
                     // Inform the ChatManager that this thread needs to receive chat messages
                     ChatManager.Instance.AddChatEmployeeToActiveList(this);
-
-                    Thread sendToUserThread = new Thread(sendToUserJob);
                     sendToUserThread.Start();
 
                     while (_connectionWithClientIsActive) {
                         // ProcessUserChatMessage returns false if it received "quit"
                         if (ProcessUserChatMessage() == CloudFlags.CLIENT_TO_DASHBOARD) {
+                            sendToUserThread.Interrupt();
                             break;
-                            // TODO CHAT : interrupt helper thread when the client goes back to the dashboard.
-                            Debug.Assert(false);
                         }
                     }
 
                     // TODO : like I said, interrupt the helper so it doesn't get stuck here.
-                    sendToUserThread.Join();
+                }
+                // If the user closed the connection
+                catch (IOException e) {
+                    Debug.WriteLine(e.Message);
+                    if (sendToUserThread.IsAlive) {
+                        sendToUserThread.Interrupt();
+                    }
                 }
                 catch (Exception e) {
                     Error.WriteLine("Error in ChatEmployeeJob by " + _debugPreamble + e.Message);
                     Error.WriteLine("Therefore, returning the client back to the CloudManager.");
                     Error.WriteLine("Chat employee will remain available for future jobs.");
                 }
+
+                Debug.WriteLine("Trying to join the sendToUserThread");
+                sendToUserThread.Join();
+                Debug.WriteLine("Success! Joined the sendToUserThread");
 
                 ChatManager.Instance.RemoveChatEmployeeFromActiveList(this);
                 ChatManager.Instance.AddChatEmployeeToFreeQueue(this);
@@ -161,6 +169,7 @@ class ChatEmployee
     /// <returns></returns>
     private CloudFlags ProcessUserChatMessage()
     {
+
         if (_senderReceiver == null) {
             throw new Exception("Chat Employee " + Environment.CurrentManagedThreadId + "'s stream was null in ProcessUserChatMessage.");
         }
@@ -173,17 +182,16 @@ class ChatEmployee
             throw new Exception("Received more than 1 chat message from the client.");
         }
 
-        (CloudFlags flag, string chatMessage) = chatMessages[0];
+        (CloudFlags flag, string formattedChatMessageBody) = chatMessages[0];
 
         if (flag == CloudFlags.CLIENT_TO_DASHBOARD) {
-            // TODO : Interrupt helper thread, etc. 
+            // TODO NEXT: Interrupt helper thread, etc. 
             Debug.Assert(false);
             return CloudFlags.CLIENT_TO_DASHBOARD;
         }
 
-        // If message is too long, just ignore it. (+1 because of the \n delimiter)
-        else if (chatMessage.Length > SystemConstants.MAX_CHAT_MESSAGE_LEN) {
-            WriteLine("Received a message that was too long: " + chatMessage.Length + " characters.");
+        else if (formattedChatMessageBody.Length > SystemConstants.MAX_FORMATTED_CHAT_MESSAGE_BODY_LEN) {
+            WriteLine("Received a message that was too long: " + formattedChatMessageBody.Length + " characters.");
             return (CloudFlags)0;
         }
 
@@ -193,10 +201,11 @@ class ChatEmployee
         }
         // Else, all correct. Go ahead and fill up all the queues.
         else {
-            ChatManager.Instance.FillAllChatClientQueues(chatMessage, _chatEmployeeThread.ManagedThreadId);
+            ChatManager.Instance.FillAllChatClientQueues(formattedChatMessageBody, _chatEmployeeThread.ManagedThreadId);
             return (CloudFlags)0;
         }
     }
+
 
 
     /// <summary>
@@ -204,20 +213,25 @@ class ChatEmployee
     /// </summary>
     public void sendToUserJob()
     {
-        while (true) {
-            string chatMessageToBeSent;
-            lock (_chatClientQueueLock) {
-                if (_CR_chatClientQueue.Count < 1) {
-                    // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
-                    Monitor.Wait(_chatClientQueueLock);
+        try {
+            while (true) {
+                string chatMessageToBeSent;
+                lock (_chatClientQueueLock) {
+                    if (_CR_chatClientQueue.Count < 1) {
+                        // Wait for the queue to be filled by EnqueueChatEmployeeQueue(), in case there was nothing.
+                        Monitor.Wait(_chatClientQueueLock);
+                    }
+                    // Now it's guaranteed that there's data in the queue.
+                    chatMessageToBeSent = _CR_chatClientQueue.Dequeue();
                 }
-                // Now it's guaranteed that there's data in the queue.
-                chatMessageToBeSent = _CR_chatClientQueue.Dequeue();
-                // TODO : Interrupt the thread properly, same method as ClientInstance.
+                lock (_senderReceiverLock) {
+                    _senderReceiver!.SendMessage(CloudFlags.SERVER_CHAT_MESSAGE, chatMessageToBeSent);
+                }
             }
-            lock (_senderReceiverLock){
-                _senderReceiver!.SendMessage(CloudFlags.SERVER_CHAT_MESSAGE, chatMessageToBeSent);
-            }
+        }
+        catch (ThreadInterruptedException) {
+            Debug.WriteLine("Client is no longer in chat. Closing the sendToUserJob.");
+            return;
         }
     }
 

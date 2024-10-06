@@ -152,6 +152,7 @@ class ClientInstance
     {
         _tcpClient = new TcpClient();
         _tcpClient.Connect(_serverIpEndPoint);
+        _stream = _tcpClient.GetStream();
         _senderReceiver!.UpdateStream(_tcpClient.GetStream());
         ;
 
@@ -441,7 +442,6 @@ class ClientInstance
         Console.WriteLine(" (type \"quit\" to return to Dashboard.)");
         Thread receiveThread = new Thread(() => ReceiveMessagesJob());
         try {
-
             receiveThread.Start();
             string? userMessage = "";
             while (true) {
@@ -452,8 +452,8 @@ class ClientInstance
                 }
                 if (userMessage == "quit") {
                     _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
-                    // TODO : Forcefully interrupt the helper thread. Don't do this via sending message to the server, as thats too much coupling. 
-                    Debug.Assert(false);
+                    receiveThread.Interrupt();
+
                     // TODO : Make the user skip registration. For later, though. 
                     _clientState = ClientStates.LOGGED_IN;
                     break;
@@ -463,22 +463,25 @@ class ClientInstance
                 }
                 else {
                     string formattedChatMessage = FormatChatMessage(userMessage);
-                    _senderReceiver.SendMessage(CloudFlags.CLIENT_CHAT_MESSAGE, userMessage);
+                    _senderReceiver.SendMessage(CloudFlags.CLIENT_CHAT_MESSAGE, formattedChatMessage);
                 }
             }
+        }
+        catch (IOException e) {
+            Console.WriteLine("Server has become unresponsive. Exiting the program.");
+            receiveThread.Interrupt();
             receiveThread.Join();
+            throw e;
         }
-        catch (ThreadInterruptedException) {
-            Debug.WriteLine("Caught Thread Interrupt.");
-
-            WriteLine("Caught Thread Interrupt.");
-        }
+        receiveThread.Join();
         WriteLine("Returning to dashboard.");
     }
 
     private string FormatChatMessage(string userMessage)
     {
-        return _username + SystemConstants.CHAT_MESSAGE_PREAMBLE;
+        string ret = _username + SystemConstants.CHAT_MESSAGE_PREAMBLE + userMessage;
+        Debug.Assert(ret.Length <= SystemConstants.MAX_FORMATTED_CHAT_MESSAGE_BODY_LEN);
+        return ret;
     }
 
     /// <summary>
@@ -486,15 +489,22 @@ class ClientInstance
     /// </summary>
     private void ReceiveMessagesJob()
     {
-        while (true) {
-            List<(CloudFlags flag, string body)> receivedChats = _senderReceiver.ReceiveMessages();
-            // Parse the data into a list of Messages, separated by strings that match Flags.CHAT_MESSAGE
-            foreach (var chat in receivedChats) {
-                if (chat.flag != CloudFlags.SERVER_CHAT_MESSAGE) {
-                    throw new Exception("ReceiveMessagesJob: Received incorrect flag from server.");
+        try {
+
+            while (true) {
+                List<(CloudFlags flag, string body)> receivedChats = _senderReceiver.ReceiveMessages();
+                // Parse the data into a list of Messages, separated by strings that match Flags.CHAT_MESSAGE
+                foreach (var chat in receivedChats) {
+                    if (chat.flag != CloudFlags.SERVER_CHAT_MESSAGE) {
+                        throw new Exception("ReceiveMessagesJob: Received incorrect flag from server.");
+                    }
+                    WriteLine(chat.body);
                 }
-                WriteLine(chat.body);
             }
+        }
+        catch (ThreadInterruptedException) {
+            Debug.WriteLine("User is no longer in chat. Closing the ReceiveMessagesJob.");
+            return;
         }
     }
 }

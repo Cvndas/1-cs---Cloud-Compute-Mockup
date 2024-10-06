@@ -106,6 +106,10 @@ internal class CloudEmployee
     // Persists across different client connections, and when waiting in the _freeEmployeeQueue.
     private void EmployeeJob()
     {
+        // TODO - Catch "TcpClient is no longer active exception" and re-throw it in all functions until it is caught here. 
+        // Do the same thing for the ChatEmployees. 
+        // Also verify that "isActive" actualy does something in the pendinguserqueue popping system. 
+        // Debug.Assert(false);
         while (true) {
             lock (_isWorkingLock) {
                 if (_isWorking == false) {

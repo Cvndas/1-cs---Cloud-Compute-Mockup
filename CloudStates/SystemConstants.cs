@@ -14,5 +14,13 @@ public class SystemConstants
     public const int MAX_USERS_IN_QUEUE = 100;
     public const int MAX_BODY_BYTE_LEN = 50;
     public static readonly string CHAT_MESSAGE_PREAMBLE = ": ";
+    /// <summary>
+    /// Max length of a chat message's body, which is the body excluding "Username: "
+    /// </summary>
     public static readonly int MAX_CHAT_MESSAGE_LEN = MAX_BODY_BYTE_LEN - MAX_USERNAME_LENGTH - CHAT_MESSAGE_PREAMBLE.Length;
+
+    /// <summary>
+    /// Max length of a chat message in the format of "Username: hey there."
+    /// </summary>
+    public static readonly int MAX_FORMATTED_CHAT_MESSAGE_BODY_LEN = MAX_BODY_BYTE_LEN;
 }
