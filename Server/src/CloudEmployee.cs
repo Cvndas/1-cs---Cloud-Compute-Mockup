@@ -119,7 +119,7 @@ internal class CloudEmployee
                 }
                 try {
 
-                    Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
+                    Debug.Assert(_employeeState == ServerStates.CHECKING_IF_BYPASS_IS_LEGAL);
                     // First wait on conditional variable _hasWork, and then
                     RunCloudEmployeeStateMachine();
                     WriteLine(_debug_preamble + "and the client have disconnected, mutual agreement.");

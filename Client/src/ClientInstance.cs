@@ -179,7 +179,9 @@ class ClientInstance
         bool isAssigned = false;
         // Either you get OK, or you receive QUEUE_POSITION.
         while (!isAssigned) {
+            Console.WriteLine("Waiting for assignment response of any kind.");
             List<(CloudFlags flag, string body)> serverResponses = _senderReceiver.ReceiveMessages();
+            Console.WriteLine("Got the response.");
 
             foreach ((CloudFlags flag, string body) in serverResponses) {
                 if (flag == CloudFlags.SERVER_OK) {
@@ -254,17 +256,23 @@ class ClientInstance
         _clientState = ClientStates.REGISTRATION_INFO_SENT;
     }
 
-    private void TryToBypassLogin(){
+    private void TryToBypassLogin()
+    {
         _senderReceiver.SendMessage(CloudFlags.CLIENT_BYPASS_LOGIN_REQUEST, "");
-        CloudFlags recvFlag = _senderReceiver.ReceiveMessages()[0].flagtype;
-        if (recvFlag == CloudFlags.SERVER_OK){
-            _clientState = ClientStates.LOGGED_IN;
-        }
-        else if (recvFlag == CloudFlags.SERVER_REJECTED){
-            _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
-        }
-        else {
-            throw new Exception("Received invalid flag from server in TryToBypassLogin.");
+        foreach (var response in _senderReceiver.ReceiveMessages()) {
+            CloudFlags recvFlag = response.flagtype;
+            if (recvFlag == CloudFlags.SERVER_OK) {
+                _clientState = ClientStates.LOGGED_IN;
+            }
+            else if (recvFlag == CloudFlags.SERVER_REJECTED) {
+                _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+            }
+            else if (recvFlag == CloudFlags.SERVER_QUEUE_POSITION){
+                WriteLine("Server Queue Position: " + response.body);
+            }
+            else {
+                throw new Exception("Received invalid flag from server in TryToBypassLogin.");
+            }
         }
     }
 
@@ -483,8 +491,9 @@ class ClientInstance
                 if (userMessage == "quit") {
                     source.Cancel();
                     receiveThread.Join();
+
                     _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
-                    if (_senderReceiver.ReceiveMessages()[0].flagtype != CloudFlags.SERVER_OK){
+                    if (_senderReceiver.ReceiveMessages()[0].flagtype != CloudFlags.SERVER_OK) {
                         throw new IOException();
                     }
                     break;
@@ -504,7 +513,7 @@ class ClientInstance
             throw e;
         }
 
-        _clientState = ClientStates.TRY_BYPASS_LOGIN;
+        _clientState = ClientStates.UNASSIGNED;
         WriteLine("Returning to dashboard.");
     }
 

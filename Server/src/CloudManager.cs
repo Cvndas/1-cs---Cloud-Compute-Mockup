@@ -287,11 +287,15 @@ internal class CloudManager
                 if (_CR_pendingUserQueue.Count == 0) {
                     Monitor.Wait(_pendingUserQueueLock);
                 }
+                Console.WriteLine("CLOUD MANAGER HAS RECEIVED THE SIGNAL TO ASSIGN USER.");
                 Debug.Assert(_CR_pendingUserQueue.Count != 0);
                 UserResources user = _CR_pendingUserQueue.Dequeue();
                 if (UserIsStillActive(user)) {
+                    WriteLine("gonna inform");
                     InformUserHeIsAssigned(user);
+                    WriteLine("gonna notify");
                     NotifyUsersOfQueueStatus();
+                    Console.WriteLine("gonna assign");
                     AssignToEmployee(user);
                 }
                 else {

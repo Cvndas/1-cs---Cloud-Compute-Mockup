@@ -113,6 +113,7 @@ class ChatEmployee
                         // ProcessUserChatMessage returns false if it received "quit"
                         if (ProcessUserChatMessage() == CloudFlags.CLIENT_TO_DASHBOARD) {
                             sendToUserThread.Interrupt();
+                            _senderReceiver!.SendMessage(CloudFlags.SERVER_OK, "");
                             break;
                         }
                     }
@@ -218,7 +219,6 @@ class ChatEmployee
             }
         }
         catch (ThreadInterruptedException) {
-            _senderReceiver!.SendMessage(CloudFlags.SERVER_OK, "");
             Debug.WriteLine("Client is no longer in chat. Closing the sendToUserJob.");
             return;
         }
