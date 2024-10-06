@@ -32,8 +32,12 @@ class ClientInstance
         try {
             RunClientStateMachine();
         }
+        catch (IOException) {
+            WriteLine("Lost connection to the server. Exiting program.");
+        }
         catch (Exception e) {
-            Error.WriteLine("Unexpected Exception: " + e.Message);
+            WriteLine("Unexpected error. Exiting program.");
+            Debug.WriteLine("Reason: " + e.Message);
         }
         finally {
             WriteLine("Exiting the Castle in the Clouds.");
@@ -94,7 +98,6 @@ class ClientInstance
     {
         bool isTerminated = false;
 
-
         while (!isTerminated) {
             try {
                 switch (_clientState) {
@@ -106,6 +109,13 @@ class ClientInstance
                             Error.WriteLine("Failed to connect to the server: " + e.Message);
                             return;
                         }
+                        break;
+                    case ClientStates.UNASSIGNED:
+                        GetAssignedToEmployee();
+                        break;
+
+                    case ClientStates.TRY_BYPASS_LOGIN:
+                        TryToBypassLogin();
                         break;
 
                     case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
@@ -148,23 +158,25 @@ class ClientInstance
                         throw new Exception("Invalid State Transition");
                 }
             }
-            catch (IOException) {
-                Console.WriteLine("Lost connection to the server. Exiting.");
+            catch (IOException e) {
                 _clientState = ClientStates.PROGRAM_CLOSED;
+                throw e;
             }
         }
     }
+
     private void ConnectToServer()
     {
         _tcpClient = new TcpClient();
         _tcpClient.Connect(_serverIpEndPoint);
         _stream = _tcpClient.GetStream();
         _senderReceiver!.UpdateStream(_tcpClient.GetStream());
-        ;
+        _clientState = ClientStates.UNASSIGNED;
+    }
 
+    private void GetAssignedToEmployee()
+    {
         bool isAssigned = false;
-        int maxMessageSize = sizeof(CloudFlags) + SystemConstants.MAX_USERS_IN_QUEUE.ToString().Length + Encoding.UTF8.GetBytes("\n")[0];
-
         // Either you get OK, or you receive QUEUE_POSITION.
         while (!isAssigned) {
             List<(CloudFlags flag, string body)> serverResponses = _senderReceiver.ReceiveMessages();
@@ -182,6 +194,7 @@ class ClientInstance
                     }
                     if (positionInQueue > SystemConstants.MAX_USERS_IN_QUEUE) {
                         WriteLine("Server is overloaded. Try again later.");
+                        throw new IOException();
                     }
                     else if (positionInQueue != 1) {
                         WriteLine("Position in queue: " + positionInQueue);
@@ -191,13 +204,10 @@ class ClientInstance
                     throw new Exception("Invalid flag received from the server.");
                 }
             }
-
         }
 
-        _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+        _clientState = ClientStates.TRY_BYPASS_LOGIN;
     }
-
-
 
 
     private void ChooseAuthenticateMethod()
@@ -242,6 +252,20 @@ class ClientInstance
         string credentials = ReadLine() ?? throw new Exception("Failed to read [username_password] in SendRegistrationInfo()");
         _senderReceiver.SendMessage(CloudFlags.CLIENT_SENDING_REGISTRATION_INFO, credentials);
         _clientState = ClientStates.REGISTRATION_INFO_SENT;
+    }
+
+    private void TryToBypassLogin(){
+        _senderReceiver.SendMessage(CloudFlags.CLIENT_BYPASS_LOGIN_REQUEST, "");
+        CloudFlags recvFlag = _senderReceiver.ReceiveMessages()[0].flagtype;
+        if (recvFlag == CloudFlags.SERVER_OK){
+            _clientState = ClientStates.LOGGED_IN;
+        }
+        else if (recvFlag == CloudFlags.SERVER_REJECTED){
+            _clientState = ClientStates.CHOOSING_AUTHENTICATE_METHOD;
+        }
+        else {
+            throw new Exception("Received invalid flag from server in TryToBypassLogin.");
+        }
     }
 
     private void SendLoginInfo()
@@ -452,7 +476,6 @@ class ClientInstance
             receiveThread.Start();
             string? userMessage = "";
             while (true) {
-                Write("Send message: ");
                 userMessage = ReadLine();
                 if (userMessage == null) {
                     throw new Exception("User's input was null in RunChatInterface");
@@ -460,8 +483,10 @@ class ClientInstance
                 if (userMessage == "quit") {
                     source.Cancel();
                     receiveThread.Join();
-                    Console.WriteLine("Join successfull.");
                     _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
+                    if (_senderReceiver.ReceiveMessages()[0].flagtype != CloudFlags.SERVER_OK){
+                        throw new IOException();
+                    }
                     break;
                 }
                 if (userMessage.Length > SystemConstants.MAX_CHAT_MESSAGE_LEN) {
@@ -479,7 +504,7 @@ class ClientInstance
             throw e;
         }
 
-        _clientState = ClientStates.NO_CONNECTION;
+        _clientState = ClientStates.TRY_BYPASS_LOGIN;
         WriteLine("Returning to dashboard.");
     }
 
@@ -513,7 +538,6 @@ class ClientInstance
             throw e;
         }
         catch (OperationCanceledException) {
-            Debug.WriteLine("Gracefully cancelled the ReceiveMessagesJob");
             return;
         }
     }

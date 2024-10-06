@@ -23,6 +23,7 @@ public enum CloudFlags : byte
     /// Overlaps with '\n'. Don't use it. 
     /// </summary>
     IGNORE,
+    CLIENT_BYPASS_LOGIN_REQUEST,
 
     CLIENT_CHAT_MESSAGE,
     SERVER_OK,
@@ -44,6 +45,7 @@ public enum CloudFlags : byte
     SERVER_NO_TOKENS,
     SERVER_UPLOAD_ACCEPTED,
     SERVER_UPLOAD_FAILED,
+    SERVER_REJECTED,
     SERVER_UPLOAD_SUCCESSFUL,
     SERVER_FILE_DOESNT_EXIST_ON_SERVER,
     SERVER_DOWNLOAD_COMPLETE,

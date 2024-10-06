@@ -6,6 +6,8 @@ public enum ClientStates
     PROGRAM_CLOSED,
     CHOOSING_AUTHENTICATE_METHOD,
     REGISTERING,
+    TRY_BYPASS_LOGIN,
+    UNASSIGNED,
     LOGGING_IN,
     LOGIN_INFO_SENT,
     REGISTRATION_INFO_SENT,
@@ -20,6 +22,7 @@ public enum ClientStates
 public enum ServerStates
 {
     NO_CONNECTION,
+    CHECKING_IF_BYPASS_IS_LEGAL,
     PROCESS_AUTHENTICATION_CHOICE,
     CHECKING_LOGGED_IN_STATUS, // Entry state when Employee is assigned to a User.
     PROCESS_REGISTRATION,

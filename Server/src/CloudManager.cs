@@ -45,6 +45,12 @@ internal class CloudManager
             _CR_loggedInUsersResources.Add(user);
         }
     }
+    public void RemoveUserFromLoggedInList(UserResources user)
+    {
+        lock(_loggedInUsersResourcesLock) {
+            _CR_loggedInUsersResources.Remove(user);
+        }
+    }
 
     /// <summary>
     /// Threads: CloudEmployee-x <br/>
@@ -68,11 +74,11 @@ internal class CloudManager
         return ret;
     }
 
-    public bool UserIsLoggedIn(string username)
+    public bool UserIsLoggedIn(UserResources User)
     {
         lock (_loggedInUsersResourcesLock) {
             foreach (var user in _CR_loggedInUsersResources) {
-                if (user.username == username) {
+                if (user == User) {
                     return true;
                 }
             }

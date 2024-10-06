@@ -61,7 +61,7 @@ internal class CloudEmployee
         _loginAttempts = 0;
 
         _debug_preamble = $"DEBUG: Employee  {ThreadId} ";
-        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+        _employeeState = ServerStates.CHECKING_IF_BYPASS_IS_LEGAL;
 
         // Now notify the thread to start working.
         lock (_isWorkingLock) {
@@ -79,6 +79,7 @@ internal class CloudEmployee
         Debug.Assert(_userResources != null);
         Debug.Assert(_userResources.stream != null);
         Debug.Assert(_userResources.client != null);
+        CloudManager.Instance.RemoveUserFromLoggedInList(_userResources!);
         _userResources.stream.Dispose();
         _userResources.client.Dispose();
     }
@@ -116,33 +117,28 @@ internal class CloudEmployee
                     // Wait to be assigned work by CloudManager
                     Monitor.Wait(_isWorkingLock);
                 }
-                Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
-                // First wait on conditional variable _hasWork, and then
                 try {
-                    if (_userResources == null) {
-                        throw new Exception("_userResources was null before launching state machine.");
-                    }
-                    else if (_userResources.username != null && CloudManager.Instance.UserIsLoggedIn(_userResources.username)) {
-                        _employeeState = ServerStates.IN_DASHBOARD;
-                    }
-                    else {
-                        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE; // Set the state to the entry state
-                    }
+
+                    Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
+                    // First wait on conditional variable _hasWork, and then
                     RunCloudEmployeeStateMachine();
                     WriteLine(_debug_preamble + "and the client have disconnected, mutual agreement.");
                 }
-                // TODO : Test that -> This exception should be triggered if at any point in the relationship 
-                //between Employee and Client, the TCP connection is broken.
+                catch (IOException) {
+
+                }
                 catch (Exception e) {
                     Debug.WriteLine(_debug_preamble + "Exited the state machine. Reason: " + e.Message);
                 }
-                if (!_transferedUserToChat) {
-                    DisposeOfClient();
+                finally {
+                    if (!_transferedUserToChat) {
+                        DisposeOfClient();
+                    }
                 }
                 _isWorking = false;
                 CloudManager.Instance.AddToFreeQueueRemoveFromActiveList(this);
-
             }
+
         }
     }
 
@@ -155,7 +151,9 @@ internal class CloudEmployee
             switch (_employeeState) {
                 case ServerStates.NO_CONNECTION:
                     return;
-
+                case ServerStates.CHECKING_IF_BYPASS_IS_LEGAL:
+                    CheckIfBypassIsLegal();
+                    break;
                 case ServerStates.PROCESS_AUTHENTICATION_CHOICE:
                     ProcessAuthenticationChoice();
                     break;
@@ -181,6 +179,24 @@ internal class CloudEmployee
                     throw new Exception(_debug_preamble + "Invalid state transition");
             }
         }
+    }
+
+    private void CheckIfBypassIsLegal()
+    {
+        if (_senderReceiver!.ReceiveMessages()[0].flagtype == CloudFlags.CLIENT_BYPASS_LOGIN_REQUEST) {
+            if (CloudManager.Instance.UserIsLoggedIn(_userResources!)) {
+                _senderReceiver.SendMessage(CloudFlags.SERVER_OK, "");
+                _employeeState = ServerStates.IN_DASHBOARD;
+            }
+            else {
+                _senderReceiver.SendMessage(CloudFlags.SERVER_REJECTED, "");
+                _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
+            }
+        }
+        else {
+            throw new IOException("User sent the wrong flags in CheckIfBypassIsLegal.");
+        }
+        return;
     }
 
     // Thread: Employee-x ==  self
@@ -312,13 +328,6 @@ internal class CloudEmployee
         }
         string username = usernamePasswordArray[0];
         string password = usernamePasswordArray[1];
-
-        if (CloudManager.Instance.UserIsLoggedIn(username)) {
-            _senderReceiver.SendMessage(CloudFlags.SERVER_ALREADY_LOGGED_IN, "");
-            _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE;
-            _loginAttempts += 1;
-            return;
-        }
 
         // If username is too long, it means it doesn't exist. 
         if (username.Length > SystemConstants.MAX_USERNAME_LENGTH || !CloudManager.Instance.UserIsRegistered(username)) {

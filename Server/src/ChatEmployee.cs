@@ -17,11 +17,7 @@ class ChatEmployee
     private readonly object? _threadIsReadyLock;
     // ----------------------------------- // 
 
-    // ------------ Concurrency ---------- //
-    // Both the main thread and the helper thread of the chat employee may send over the socket
-    // at once.
-    private CloudSenderReceiver? _senderReceiver;
-    private readonly object _senderReceiverLock;
+
     // ----------------------------------- // 
 
     public Thread _chatEmployeeThread;
@@ -36,6 +32,10 @@ class ChatEmployee
     private Queue<string> _CR_chatClientQueue;
     private object _chatClientQueueLock;
     // ---------------------------------- // 
+
+
+    // No concurrency here.
+    private CloudSenderReceiver? _senderReceiver;
 
     /// <summary>
     /// Set by ChatEmployee's main thread, read by ChatEmployee's helper thread.
@@ -55,7 +55,6 @@ class ChatEmployee
 
         _connectionWithClientIsActive = false;
 
-        _senderReceiverLock = new object();
 
         _chatEmployeeThread = new(ChatEmployeeJob);
         lock (_threadIsReadyLock) {
@@ -118,16 +117,17 @@ class ChatEmployee
                         }
                     }
                 }
-                // If the user closed the connection
+                // If connection to user is broken.
                 catch (IOException e) {
                     Debug.WriteLine(e.Message);
                     if (sendToUserThread.IsAlive) {
                         sendToUserThread.Interrupt();
                     }
+                    CloudManager.Instance.RemoveUserFromLoggedInList(_userResources!);
                 }
                 catch (Exception e) {
                     Error.WriteLine("Error in ChatEmployeeJob by " + _debugPreamble + e.Message);
-                    Error.WriteLine("Therefore, returning the client back to the CloudManager.");
+                    Error.WriteLine("Therefore, returning the client back to the PendingUserQueue.");
                     Error.WriteLine("Chat employee will remain available for future jobs.");
                 }
 
@@ -137,11 +137,7 @@ class ChatEmployee
 
                 ChatManager.Instance.RemoveChatEmployeeFromActiveList(this);
                 ChatManager.Instance.AddChatEmployeeToFreeQueue(this);
-                // Another condition that I can't possibly see ever being triggered, but oh well. This program is getting so complicated anyway.
-                if (_userResources == null) {
-                    throw new Exception("ChatEmployee " + Environment.CurrentManagedThreadId + "'s _userResources was null in ChatEmployeeJob");
-                }
-                CloudManager.Instance.AddToUserQueue(_userResources);
+                CloudManager.Instance.AddToUserQueue(_userResources!);
             }
         }
     }
@@ -173,9 +169,7 @@ class ChatEmployee
         }
 
         List<(CloudFlags flagFromClient, string chatMessage)> chatMessages;
-        lock (_senderReceiverLock) {
-            chatMessages = _senderReceiver.ReceiveMessages();
-        }
+        chatMessages = _senderReceiver.ReceiveMessages();
         if (chatMessages.Count > 1) {
             throw new Exception("Received more than 1 chat message from the client.");
         }
@@ -220,12 +214,11 @@ class ChatEmployee
                     // Now it's guaranteed that there's data in the queue.
                     chatMessageToBeSent = _CR_chatClientQueue.Dequeue();
                 }
-                lock (_senderReceiverLock) {
-                    _senderReceiver!.SendMessage(CloudFlags.SERVER_CHAT_MESSAGE, chatMessageToBeSent);
-                }
+                _senderReceiver!.SendMessage(CloudFlags.SERVER_CHAT_MESSAGE, chatMessageToBeSent);
             }
         }
         catch (ThreadInterruptedException) {
+            _senderReceiver!.SendMessage(CloudFlags.SERVER_OK, "");
             Debug.WriteLine("Client is no longer in chat. Closing the sendToUserJob.");
             return;
         }

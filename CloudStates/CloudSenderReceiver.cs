@@ -70,7 +70,6 @@ public class CloudSenderReceiver
         }
 
         catch (OperationCanceledException e) {
-            Debug.WriteLine("Reading operation was cancelled. Flushing the remaining data in the stream.");
             Array.Clear(_receiveBuffer);
             while (_stream!.DataAvailable) {
                 _stream!.Read(_receiveBuffer);
