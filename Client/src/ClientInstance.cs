@@ -94,59 +94,65 @@ class ClientInstance
     {
         bool isTerminated = false;
 
+
         while (!isTerminated) {
-            switch (_clientState) {
-                case ClientStates.NO_CONNECTION:
-                    try {
-                        ConnectToServer();
-                    }
-                    catch (Exception e) {
-                        Error.WriteLine("Failed to connect to the server: " + e.Message);
+            try {
+                switch (_clientState) {
+                    case ClientStates.NO_CONNECTION:
+                        try {
+                            ConnectToServer();
+                        }
+                        catch (Exception e) {
+                            Error.WriteLine("Failed to connect to the server: " + e.Message);
+                            return;
+                        }
+                        break;
+
+                    case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
+                        ChooseAuthenticateMethod();
+                        break;
+
+                    case ClientStates.REGISTERING:
+                        SendRegistrationInfo();
+                        break;
+
+                    case ClientStates.REGISTRATION_INFO_SENT:
+                        HandleRegisterResponse();
+                        if (_registrationAttempts > SystemConstants.MAX_REGISTRATION_ATTEMPTS) {
+                            WriteLine("Too many registration attempts made.");
+                            _clientState = ClientStates.PROGRAM_CLOSED;
+                        }
+                        break;
+
+                    case ClientStates.LOGGING_IN:
+                        SendLoginInfo();
+                        break;
+
+                    case ClientStates.LOGIN_INFO_SENT:
+                        HandleLoginResponse();
+                        if (_loginAttempts > SystemConstants.MAX_LOGIN_ATTEMPTS) {
+                            WriteLine("Too many login attempts made.");
+                            _clientState = ClientStates.PROGRAM_CLOSED;
+                        }
+                        break;
+
+                    case ClientStates.LOGGED_IN:
+                        ChooseDashboardOption();
+                        break;
+                    case ClientStates.IN_CHAT:
+                        RunChatInterface();
+                        break;
+                    case ClientStates.PROGRAM_CLOSED:
                         return;
-                    }
-                    break;
-
-                case ClientStates.CHOOSING_AUTHENTICATE_METHOD:
-                    ChooseAuthenticateMethod();
-                    break;
-
-                case ClientStates.REGISTERING:
-                    SendRegistrationInfo();
-                    break;
-
-                case ClientStates.REGISTRATION_INFO_SENT:
-                    HandleRegisterResponse();
-                    if (_registrationAttempts > SystemConstants.MAX_REGISTRATION_ATTEMPTS) {
-                        WriteLine("Too many registration attempts made.");
-                        _clientState = ClientStates.PROGRAM_CLOSED;
-                    }
-                    break;
-
-                case ClientStates.LOGGING_IN:
-                    SendLoginInfo();
-                    break;
-
-                case ClientStates.LOGIN_INFO_SENT:
-                    HandleLoginResponse();
-                    if (_loginAttempts > SystemConstants.MAX_LOGIN_ATTEMPTS) {
-                        WriteLine("Too many login attempts made.");
-                        _clientState = ClientStates.PROGRAM_CLOSED;
-                    }
-                    break;
-
-                case ClientStates.LOGGED_IN:
-                    ChooseDashboardOption();
-                    break;
-                case ClientStates.IN_CHAT:
-                    RunChatInterface();
-                    break;
-                case ClientStates.PROGRAM_CLOSED:
-                    return;
-                default:
-                    throw new Exception("Invalid State Transition");
+                    default:
+                        throw new Exception("Invalid State Transition");
+                }
+            }
+            catch (IOException) {
+                Console.WriteLine("Lost connection to the server. Exiting.");
+                _clientState = ClientStates.PROGRAM_CLOSED;
             }
         }
-
     }
     private void ConnectToServer()
     {
@@ -177,7 +183,7 @@ class ClientInstance
                     if (positionInQueue > SystemConstants.MAX_USERS_IN_QUEUE) {
                         WriteLine("Server is overloaded. Try again later.");
                     }
-                    else if (positionInQueue != 1){
+                    else if (positionInQueue != 1) {
                         WriteLine("Position in queue: " + positionInQueue);
                     }
                 }
@@ -440,7 +446,8 @@ class ClientInstance
 
         Console.Write("Welcome to the Cloud Chat, " + _username + ".");
         Console.WriteLine(" (type \"quit\" to return to Dashboard.)");
-        Thread receiveThread = new Thread(() => ReceiveMessagesJob());
+        CancellationTokenSource source = new CancellationTokenSource();
+        Thread receiveThread = new Thread(() => ReceiveMessagesJob(source.Token));
         try {
             receiveThread.Start();
             string? userMessage = "";
@@ -451,7 +458,7 @@ class ClientInstance
                     throw new Exception("User's input was null in RunChatInterface");
                 }
                 if (userMessage == "quit") {
-                    receiveThread.Interrupt();
+                    source.Cancel();
                     receiveThread.Join();
                     Console.WriteLine("Join successfull.");
                     _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
@@ -467,13 +474,11 @@ class ClientInstance
             }
         }
         catch (IOException e) {
-            Console.WriteLine("Server has become unresponsive. Exiting the program.");
-            receiveThread.Interrupt();
+            source.Cancel();
             receiveThread.Join();
             throw e;
         }
 
-        // TODO : Make the user skip registration. For later, though. 
         _clientState = ClientStates.NO_CONNECTION;
         WriteLine("Returning to dashboard.");
     }
@@ -488,28 +493,27 @@ class ClientInstance
     /// <summary>
     /// Thread: Chat Client Helper thread. <br/>Launched in RunChatInterface<br/>Joined in RunChatInterface.
     /// </summary>
-    private void ReceiveMessagesJob()
+    private async void ReceiveMessagesJob(CancellationToken token)
     {
         try {
 
             while (true) {
-                List<(CloudFlags flag, string body)> receivedChats = _senderReceiver.ReceiveMessages();
+                var receivedChats = await _senderReceiver.CancellableReceiveMessages(token);
                 // Parse the data into a list of Messages, separated by strings that match Flags.CHAT_MESSAGE
                 foreach (var chat in receivedChats) {
-                    if (chat.flag != CloudFlags.SERVER_CHAT_MESSAGE) {
-                        throw new Exception("ReceiveMessagesJob: Received incorrect flag from server." + chat.flag);
-                    }
-                    if (chat.flag == CloudFlags.SERVER_QUEUE_POSITION) {
-                        // TODO NEXT: Handle returning to dashboard immediately, skipping login, displaying queue information
-                        // only if necessary. 
-                        return;
+                    if (chat.flagtype != CloudFlags.SERVER_CHAT_MESSAGE) {
+                        throw new Exception("ReceiveMessagesJob: Received incorrect flag from server." + chat.flagtype);
                     }
                     WriteLine(chat.body);
                 }
             }
         }
-        catch (ThreadInterruptedException) {
-            Debug.WriteLine("User is no longer in chat. Closing the ReceiveMessagesJob.");
+        catch (IOException e) {
+            Debug.WriteLine("ReceiveMessagesJob: Lost connection to server.");
+            throw e;
+        }
+        catch (OperationCanceledException) {
+            Debug.WriteLine("Gracefully cancelled the ReceiveMessagesJob");
             return;
         }
     }

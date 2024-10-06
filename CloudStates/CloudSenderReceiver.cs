@@ -1,6 +1,7 @@
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
+using System.Diagnostics;
 
 
 namespace CloudStates;
@@ -28,72 +29,100 @@ public class CloudSenderReceiver
 
     public List<(CloudFlags flagtype, string body)> ReceiveMessages()
     {
-        try {
-            Array.Clear(_receiveBuffer); // Make sure you don't receive data from previous reads that may have been interrupted.
-            var ret = new List<(CloudFlags, string)>(5);
-            System.Diagnostics.Debug.Assert(_stream!.CanRead);
+        Array.Clear(_receiveBuffer); // Make sure you don't receive data from previous reads that may have been interrupted.
+        System.Diagnostics.Debug.Assert(_stream!.CanRead);
 
-            // Read all data that is available
-            int bytesReceived = 0;
+        // Read all data that is available
+        int bytesReceived = 0;
+        do {
+            if (bytesReceived == RECEIVE_BUFFER_SIZE) {
+                Array.Clear(_receiveBuffer);
+                throw new ReadBufferTooSmallException("Failed to read all messages available in stream. Buffer was too small.");
+            }
+            bytesReceived += _stream!.Read(_receiveBuffer, 0, MAX_MESSAGE_BYTE_LEN);
+        } while (_stream.DataAvailable);
+
+        if (bytesReceived == 0) {
+            throw new IOException("Stream data was not readable.");
+        }
+
+        return ParseReceivedData(_receiveBuffer, bytesReceived);
+    }
+
+    public async Task<List<(CloudFlags flagtype, string body)>> CancellableReceiveMessages(CancellationToken token)
+    {
+        Array.Clear(_receiveBuffer); // Make sure you don't receive data from previous reads that may have been interrupted.
+        System.Diagnostics.Debug.Assert(_stream!.CanRead);
+
+        int bytesReceived = 0;
+        Task<int> iterationBytesReceived;
+        try {
             do {
                 if (bytesReceived == RECEIVE_BUFFER_SIZE) {
                     Array.Clear(_receiveBuffer);
                     throw new ReadBufferTooSmallException("Failed to read all messages available in stream. Buffer was too small.");
                 }
-                bytesReceived += _stream!.Read(_receiveBuffer, 0, MAX_MESSAGE_BYTE_LEN);
+                iterationBytesReceived = _stream!.ReadAsync(_receiveBuffer, 0, MAX_MESSAGE_BYTE_LEN, token);
+                bytesReceived += await iterationBytesReceived;
             } while (_stream.DataAvailable);
 
-            if (bytesReceived == 0) {
-                throw new IOException("Stream data was not readable.");
-            }
-
-
-            // Split it up into distinct messages, and add each into the return list.
-            string allDataStr = Encoding.UTF8.GetString(_receiveBuffer, 0, bytesReceived);
-            string[] allDataStrSplit = allDataStr.Split(MESSAGE_TERMINATOR);
-            System.Diagnostics.Debug.Assert(allDataStrSplit.Length > 0);
-
-            foreach (string message in allDataStrSplit) {
-                if (message == "") { // If the end of the list has been reached.
-                    break;
-                }
-                byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-                CloudFlags flag = (CloudFlags)messageBytes[0];
-
-                int messageBodyLen = messageBytes.Length - FLAG_BYTE_LENGTH;
-
-                if (messageBodyLen > SystemConstants.MAX_BODY_BYTE_LEN) {
-                    System.Diagnostics.Debug.WriteLine("Received a message whose body exceeded the maximum allowed body length. It has been ignored.");
-                    continue;
-                }
-
-                string bodyString = "";
-
-                if (messageBodyLen > 0) {
-                    byte[] bodyBytes = new byte[messageBodyLen];
-                    Array.Copy(messageBytes, FLAG_BYTE_LENGTH, bodyBytes, 0, messageBodyLen);
-                    bodyString = Encoding.UTF8.GetString(bodyBytes);
-                }
-
-                ret.Add((flag, bodyString));
-            }
-
-            return ret;
+            return ParseReceivedData(_receiveBuffer, bytesReceived);
         }
-        catch (ThreadInterruptedException e){
-            // Consume all data before exiting. 
-            while (_stream!.DataAvailable){
-                _stream!.Read(_receiveBuffer, 0, MAX_MESSAGE_BYTE_LEN);
+
+        catch (OperationCanceledException e) {
+            Debug.WriteLine("Reading operation was cancelled. Flushing the remaining data in the stream.");
+            Array.Clear(_receiveBuffer);
+            while (_stream!.DataAvailable) {
+                _stream!.Read(_receiveBuffer);
             }
             Array.Clear(_receiveBuffer);
             throw e;
         }
+        catch (IOException e){
+            throw e;
+        }
     }
+
+    // Split it up into distinct messages, and add each into the return list.
+    public List<(CloudFlags flagtype, string body)> ParseReceivedData(byte[] buffer, int bytesReceived)
+    {
+        var ret = new List<(CloudFlags, string)>(5);
+        string allDataStr = Encoding.UTF8.GetString(_receiveBuffer, 0, bytesReceived);
+        string[] allDataStrSplit = allDataStr.Split(MESSAGE_TERMINATOR);
+        System.Diagnostics.Debug.Assert(allDataStrSplit.Length > 0);
+
+        foreach (string message in allDataStrSplit) {
+            if (message == "") { // If the end of the list has been reached.
+                break;
+            }
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            CloudFlags flag = (CloudFlags)messageBytes[0];
+
+            int messageBodyLen = messageBytes.Length - FLAG_BYTE_LENGTH;
+
+            if (messageBodyLen > SystemConstants.MAX_BODY_BYTE_LEN) {
+                System.Diagnostics.Debug.WriteLine("Received a message whose body exceeded the maximum allowed body length. It has been ignored.");
+                continue;
+            }
+
+            string bodyString = "";
+
+            if (messageBodyLen > 0) {
+                byte[] bodyBytes = new byte[messageBodyLen];
+                Array.Copy(messageBytes, FLAG_BYTE_LENGTH, bodyBytes, 0, messageBodyLen);
+                bodyString = Encoding.UTF8.GetString(bodyBytes);
+            }
+
+            ret.Add((flag, bodyString));
+        }
+        return ret;
+    }
+
 
     public void SendMessage(CloudFlags flagtype, string body)
     {
         body.ReplaceLineEndings("");
-        System.Diagnostics.Debug.Assert((byte)flagtype != (byte) '\n');
+        System.Diagnostics.Debug.Assert((byte)flagtype != (byte)'\n');
         byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
         byte[] sendBuffer = new byte[FLAG_BYTE_LENGTH + bodyBytes.Length + MESSAGE_TERMINATOR_BYTE_LEN];
         sendBuffer[0] = (byte)flagtype;
