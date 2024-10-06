@@ -119,6 +119,15 @@ internal class CloudEmployee
                 Debug.Assert(_employeeState != ServerStates.NO_CONNECTION);
                 // First wait on conditional variable _hasWork, and then
                 try {
+                    if (_userResources == null) {
+                        throw new Exception("_userResources was null before launching state machine.");
+                    }
+                    else if (_userResources.username != null && CloudManager.Instance.UserIsLoggedIn(_userResources.username)) {
+                        _employeeState = ServerStates.IN_DASHBOARD;
+                    }
+                    else {
+                        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE; // Set the state to the entry state
+                    }
                     RunCloudEmployeeStateMachine();
                     WriteLine(_debug_preamble + "and the client have disconnected, mutual agreement.");
                 }
@@ -141,7 +150,6 @@ internal class CloudEmployee
     private void RunCloudEmployeeStateMachine()
     {
         Debug.Assert(Monitor.IsEntered(_isWorkingLock));
-        _employeeState = ServerStates.PROCESS_AUTHENTICATION_CHOICE; // Set the state to the entry state
         // Can use volatile variable to cause Employee to exit.
         while (true) {
             switch (_employeeState) {
@@ -179,7 +187,7 @@ internal class CloudEmployee
     private void ProcessAuthenticationChoice()
     {
         List<(CloudFlags flags, string body)> serverResponse = _senderReceiver!.ReceiveMessages();
-        if (serverResponse.Count > 1 || serverResponse[0].body != ""){
+        if (serverResponse.Count > 1 || serverResponse[0].body != "") {
             throw new Exception("Received incorrect responses in ProcessAuthenticationChoice.");
         }
         CloudFlags flagByte = serverResponse[0].flags;
@@ -209,8 +217,8 @@ internal class CloudEmployee
         Debug.Assert(_employeeState == ServerStates.PROCESS_REGISTRATION);
 
         // Build the string out of the Message without the flag byte.
-        List<(CloudFlags flags, string body)> serverResponses= _senderReceiver!.ReceiveMessages();
-        if (serverResponses.Count > 1){
+        List<(CloudFlags flags, string body)> serverResponses = _senderReceiver!.ReceiveMessages();
+        if (serverResponses.Count > 1) {
             throw new Exception("Received too many responses in ProcessRegistration.");
         }
         (CloudFlags flags, string body) response = serverResponses[0];
@@ -278,8 +286,8 @@ internal class CloudEmployee
     {
         Debug.Assert(_employeeState == ServerStates.PROCESS_LOGIN);
 
-        List<(CloudFlags flag, string body)> serverResponses= _senderReceiver!.ReceiveMessages();
-        if (serverResponses.Count > 1){
+        List<(CloudFlags flag, string body)> serverResponses = _senderReceiver!.ReceiveMessages();
+        if (serverResponses.Count > 1) {
             throw new Exception("Received too many responses in ProcessLogin.");
         }
         CloudFlags flag = serverResponses[0].flag;
@@ -328,7 +336,7 @@ internal class CloudEmployee
         }
 
         _senderReceiver.SendMessage(CloudFlags.SERVER_OK, "");
-        if (_userResources == null){
+        if (_userResources == null) {
             throw new Exception("_userResources was null in ProcessLogin()");
         }
         CloudManager.Instance.AddToLoggedInList(_userResources);
@@ -340,7 +348,7 @@ internal class CloudEmployee
     private void ProcessDashboard()
     {
         var response = _senderReceiver!.ReceiveMessages();
-        if (response.Count > 1){
+        if (response.Count > 1) {
             throw new Exception("Received too many server responses in ProcessDashboard().");
         }
         var receivedFlag = response[0].flagtype;

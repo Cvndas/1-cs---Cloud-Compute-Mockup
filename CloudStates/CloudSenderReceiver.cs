@@ -85,6 +85,7 @@ public class CloudSenderReceiver
             while (_stream!.DataAvailable){
                 _stream!.Read(_receiveBuffer, 0, MAX_MESSAGE_BYTE_LEN);
             }
+            Array.Clear(_receiveBuffer);
             throw e;
         }
     }
@@ -92,6 +93,7 @@ public class CloudSenderReceiver
     public void SendMessage(CloudFlags flagtype, string body)
     {
         body.ReplaceLineEndings("");
+        System.Diagnostics.Debug.Assert((byte)flagtype != (byte) '\n');
         byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
         byte[] sendBuffer = new byte[FLAG_BYTE_LENGTH + bodyBytes.Length + MESSAGE_TERMINATOR_BYTE_LEN];
         sendBuffer[0] = (byte)flagtype;

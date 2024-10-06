@@ -117,8 +117,6 @@ class ChatEmployee
                             break;
                         }
                     }
-
-                    // TODO : like I said, interrupt the helper so it doesn't get stuck here.
                 }
                 // If the user closed the connection
                 catch (IOException e) {
@@ -185,8 +183,6 @@ class ChatEmployee
         (CloudFlags flag, string formattedChatMessageBody) = chatMessages[0];
 
         if (flag == CloudFlags.CLIENT_TO_DASHBOARD) {
-            // TODO NEXT: Interrupt helper thread, etc. 
-            Debug.Assert(false);
             return CloudFlags.CLIENT_TO_DASHBOARD;
         }
 

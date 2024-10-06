@@ -177,7 +177,7 @@ class ClientInstance
                     if (positionInQueue > SystemConstants.MAX_USERS_IN_QUEUE) {
                         WriteLine("Server is overloaded. Try again later.");
                     }
-                    else {
+                    else if (positionInQueue != 1){
                         WriteLine("Position in queue: " + positionInQueue);
                     }
                 }
@@ -451,11 +451,10 @@ class ClientInstance
                     throw new Exception("User's input was null in RunChatInterface");
                 }
                 if (userMessage == "quit") {
-                    _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
                     receiveThread.Interrupt();
-
-                    // TODO : Make the user skip registration. For later, though. 
-                    _clientState = ClientStates.LOGGED_IN;
+                    receiveThread.Join();
+                    Console.WriteLine("Join successfull.");
+                    _senderReceiver.SendMessage(CloudFlags.CLIENT_TO_DASHBOARD, "");
                     break;
                 }
                 if (userMessage.Length > SystemConstants.MAX_CHAT_MESSAGE_LEN) {
@@ -473,7 +472,9 @@ class ClientInstance
             receiveThread.Join();
             throw e;
         }
-        receiveThread.Join();
+
+        // TODO : Make the user skip registration. For later, though. 
+        _clientState = ClientStates.NO_CONNECTION;
         WriteLine("Returning to dashboard.");
     }
 
@@ -496,7 +497,12 @@ class ClientInstance
                 // Parse the data into a list of Messages, separated by strings that match Flags.CHAT_MESSAGE
                 foreach (var chat in receivedChats) {
                     if (chat.flag != CloudFlags.SERVER_CHAT_MESSAGE) {
-                        throw new Exception("ReceiveMessagesJob: Received incorrect flag from server.");
+                        throw new Exception("ReceiveMessagesJob: Received incorrect flag from server." + chat.flag);
+                    }
+                    if (chat.flag == CloudFlags.SERVER_QUEUE_POSITION) {
+                        // TODO NEXT: Handle returning to dashboard immediately, skipping login, displaying queue information
+                        // only if necessary. 
+                        return;
                     }
                     WriteLine(chat.body);
                 }
